@@ -48,6 +48,7 @@ internal sealed class UeiPanel
     private static readonly Color TextColor = new(0.92f, 0.92f, 0.92f, 1f);
     private static readonly Color MutedTextColor = new(0.70f, 0.72f, 0.74f, 1f);
     private static bool _ownsNativeTooltip;
+    private static readonly Vector3[] PointerCornerBuffer = new Vector3[4];
 
     private readonly Canvas _canvas;
     private readonly int _uiLayer;
@@ -92,6 +93,7 @@ internal sealed class UeiPanel
     private int _lastRecipePageCount = 1;
     private bool _dirty = true;
     private bool _detailDirty = true;
+    private bool _loadingShown;
     private bool _settingsOpen;
     private bool _wantsVisible;
     private float _animationProgress;
@@ -262,8 +264,7 @@ internal sealed class UeiPanel
     public void Show(PlayerCamera camera)
     {
         BeginShow();
-
-        _root.transform.SetAsLastSibling();
+        _loadingShown = false;
         UpdatePanelSize(camera);
         HandlePagingInput();
 
@@ -290,14 +291,16 @@ internal sealed class UeiPanel
     public void ShowLoading(PlayerCamera camera)
     {
         BeginShow();
-
-        _root.transform.SetAsLastSibling();
         UpdatePanelSize(camera);
-        ClearChildren(_gridContent);
-        _pageText.text = "...";
-        _categoryText.text = UeiI18n.T("category.all");
-        _selectionText.text = UeiI18n.T("loading.items");
-        _detailPanel.SetActive(false);
+        if (!_loadingShown)
+        {
+            ClearChildren(_gridContent);
+            _pageText.text = "...";
+            _categoryText.text = UeiI18n.T("category.all");
+            _selectionText.text = UeiI18n.T("loading.items");
+            _detailPanel.SetActive(false);
+            _loadingShown = true;
+        }
         TickAnimation();
     }
 
@@ -308,8 +311,11 @@ internal sealed class UeiPanel
 
         if (!_root.activeSelf)
         {
-            _animationProgress = 0f;
-            ApplyAnimation();
+            if (_animationProgress > 0f)
+            {
+                _animationProgress = 0f;
+                ApplyAnimation();
+            }
             return;
         }
 
@@ -387,6 +393,16 @@ internal sealed class UeiPanel
             _root.SetActive(true);
             _dirty = true;
             ApplyAnimation();
+        }
+        BringToFront();
+    }
+
+    private void BringToFront()
+    {
+        Transform parent = _root.transform.parent;
+        if (parent != null && _root.transform.GetSiblingIndex() != parent.childCount - 1)
+        {
+            _root.transform.SetAsLastSibling();
         }
     }
 
@@ -1485,12 +1501,18 @@ internal sealed class UeiPanel
 
         try
         {
-            if (IsRshLibCustomItem(entry.Id))
+            string id = RshLibHelper.GetBaseId(entry.Id);
+            if (Item.GlobalItems != null && Item.GlobalItems.ContainsKey(id))
             {
                 return true;
             }
 
-            GameObject prefab = Resources.Load<GameObject>(entry.Id);
+            if (IsCustomModItem(id))
+            {
+                return true;
+            }
+
+            GameObject prefab = Resources.Load<GameObject>(id);
             return prefab != null && prefab.GetComponent<Item>() != null;
         }
         catch
@@ -1499,9 +1521,11 @@ internal sealed class UeiPanel
         }
     }
 
-    private static bool IsRshLibCustomItem(string itemId)
+    private static bool IsCustomModItem(string itemId)
     {
-        return RshLibHelper.IsCustomItem(itemId);
+        return RshLibHelper.IsCustomItem(itemId)
+            || CuCoreLibHelper.IsCustomItem(itemId)
+            || SexModHelper.IsRegistered(itemId);
     }
 
     private static bool TryCheatGiveItem(UeiEntry entry)
@@ -1522,7 +1546,11 @@ internal sealed class UeiPanel
             Vector3 pos = body.transform.position + new Vector3(0f, 0.4f, 0f);
             pos.z = 0f;
 
-            GameObject inst = Utils.Create(entry.Id, pos, 0f);
+            GameObject? inst = Utils.Create(entry.Id, pos, 0f);
+            if (inst == null)
+            {
+                inst = SexModHelper.CreateInstance(entry.Id, pos, 0f);
+            }
             if (inst == null)
             {
                 return false;
@@ -2840,7 +2868,7 @@ internal sealed class UeiPanel
 
     private static bool IsPointerInsideScreenBounds(RectTransform rect, Camera? uiCamera)
     {
-        Vector3[] corners = new Vector3[4];
+        Vector3[] corners = PointerCornerBuffer;
         rect.GetWorldCorners(corners);
         Vector2 min = new(float.MaxValue, float.MaxValue);
         Vector2 max = new(float.MinValue, float.MinValue);

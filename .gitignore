@@ -29,3 +29,5 @@ MonoBleedingEdge/
 .cache/
 封面.psd
 build.ps1
+CHANGELOG.md
+MODIFIED.md

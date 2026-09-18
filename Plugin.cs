@@ -18,9 +18,9 @@ public sealed partial class UeiPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "casualtiesunknown.uei";
     public const string PluginName = "UEI - Unknown Enough Items";
-    public const string PluginVersionBase = "1.2";
+    public const string PluginVersionBase = "1.2.2";
 #if !UEI_GENERATED_VERSION
-    public const string PluginVersion = PluginVersionBase + ".0";
+    public const string PluginVersion = PluginVersionBase;
 #endif
     public const string PluginAuthor = "Aakber (小叶子)";
 
@@ -33,7 +33,6 @@ public sealed partial class UeiPlugin : BaseUnityPlugin
     private static ConfigFile? ConfigFileRef;
     private static ManualLogSource? LogSourceRef;
     private static UeiRuntime? RuntimeRef;
-    private static UeiProbeListener? ProbeRef;
 
     private Harmony? _harmony;
 
@@ -65,14 +64,22 @@ public sealed partial class UeiPlugin : BaseUnityPlugin
         Logger.LogInfo($"{PluginName} {PluginVersion} loaded.");
     }
 
+    private void Update()
+    {
+        if (RuntimeRef == null)
+        {
+            EnsureRuntime("plugin Update");
+        }
+    }
+
     private void OnDisable()
     {
-        Logger.LogInfo($"UEI plugin OnDisable. runtimeAlive={RuntimeRef != null} probeAlive={ProbeRef != null}");
+        Logger.LogInfo($"UEI plugin OnDisable. runtimeAlive={RuntimeRef != null}");
     }
 
     private void OnDestroy()
     {
-        Logger.LogInfo($"UEI plugin OnDestroy. runtimeAlive={RuntimeRef != null} probeAlive={ProbeRef != null}");
+        Logger.LogInfo($"UEI plugin OnDestroy. runtimeAlive={RuntimeRef != null}");
         Instance = null!;
     }
 
@@ -83,18 +90,16 @@ public sealed partial class UeiPlugin : BaseUnityPlugin
         if (RuntimeRef == null)
         {
             GameObject go = new("UEI.Runtime");
-            UnityEngine.Object.DontDestroyOnLoad(go);
+            if (Instance != null)
+            {
+                go.transform.SetParent(Instance.transform, false);
+            }
+            else
+            {
+                UnityEngine.Object.DontDestroyOnLoad(go);
+            }
             RuntimeRef = go.AddComponent<UeiRuntime>();
             LogInfo("Created standalone UEI runtime object.");
-            createdAnything = true;
-        }
-
-        if (ProbeRef == null)
-        {
-            GameObject probe = new("UEI.Probe");
-            UnityEngine.Object.DontDestroyOnLoad(probe);
-            ProbeRef = probe.AddComponent<UeiProbeListener>();
-            LogInfo("Created standalone UEI probe listener object.");
             createdAnything = true;
         }
 
@@ -109,14 +114,6 @@ public sealed partial class UeiPlugin : BaseUnityPlugin
         if (RuntimeRef == runtime)
         {
             RuntimeRef = null;
-        }
-    }
-
-    internal static void ClearProbe(UeiProbeListener probe)
-    {
-        if (ProbeRef == probe)
-        {
-            ProbeRef = null;
         }
     }
 
@@ -193,9 +190,6 @@ public sealed partial class UeiPlugin : BaseUnityPlugin
     private void LogPatchStatus()
     {
         TryLogPatchStatus(typeof(PlayerCamera), "HandleInput");
-        TryLogPatchStatus(typeof(PlayerCamera), "HandleRadialMenu");
-        TryLogPatchStatus(typeof(PlayerCamera), "HandleWoundView");
-        TryLogPatchStatus(typeof(GlobalDark), "Update");
     }
 
     private void TryLogPatchStatus(System.Type ownerType, string methodName)
