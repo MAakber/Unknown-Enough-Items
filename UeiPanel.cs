@@ -1046,7 +1046,54 @@ internal sealed class UeiPanel
 
     private static bool HasCheatPermission()
     {
-        return HasVanillaCommandAccess() && HasKrokoshaCommandAccess();
+        return HasVanillaCommandAccess() && HasMultiplayerCommandAccess();
+    }
+
+    private static bool HasMultiplayerCommandAccess()
+    {
+        return HasTogetherCommandAccess() && HasKrokoshaCommandAccess();
+    }
+
+    // 正式版联机模组 Together（CasualtiesMP）：优先调用其 Con.CanCheat()，失败时回退读取规则字段
+    private static bool HasTogetherCommandAccess()
+    {
+        Type? conType = FindLoadedType("Together.Con");
+        if (conType != null)
+        {
+            bool? canCheat = TryInvokeStaticBool(conType, "CanCheat");
+            if (canCheat.HasValue)
+            {
+                return canCheat.Value;
+            }
+        }
+
+        Type? netType = FindLoadedType("Together.Net");
+        Type? mpType = FindLoadedType("Together.Multiplayer");
+        if (netType == null || mpType == null)
+        {
+            return true;
+        }
+
+        bool? networkRunning = TryReadStaticBool(netType, "IsRunning");
+        if (networkRunning != true)
+        {
+            return true;
+        }
+
+        bool? isClient = TryReadStaticBool(netType, "IsClient");
+        bool? allowClientCheats = TryReadTogetherRuleBool(mpType, "AllowClientCheatCommands");
+        bool? serverCheats = TryReadTogetherRuleBool(mpType, "sv_cheats");
+        if (isClient == true && allowClientCheats.HasValue)
+        {
+            return allowClientCheats.Value;
+        }
+
+        if (isClient == false && serverCheats.HasValue)
+        {
+            return serverCheats.Value;
+        }
+
+        return true;
     }
 
     private static bool HasVanillaCommandAccess()
@@ -1127,6 +1174,12 @@ internal sealed class UeiPanel
     }
 
     private static bool? TryReadKrokoshaRuleBool(Type mpType, string name)
+    {
+        object? rules = TryReadStaticMember(mpType, "rules");
+        return TryReadInstanceBool(rules, name);
+    }
+
+    private static bool? TryReadTogetherRuleBool(Type mpType, string name)
     {
         object? rules = TryReadStaticMember(mpType, "rules");
         return TryReadInstanceBool(rules, name);
