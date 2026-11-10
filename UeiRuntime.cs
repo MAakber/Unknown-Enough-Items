@@ -16,12 +16,10 @@ internal sealed class UeiRuntime : MonoBehaviour
     private bool _loggedPlayerCameraReady;
     private bool _loggedFirstShow;
     private bool _loggedUpdateActive;
-    private bool _loggedLateUpdateActive;
-    private bool _loggedPatchTickActive;
+    private int _lastTickFrame = -1;
     private int _lastInventoryUseShortcutFrame = -1;
     private string _lastHideReason = string.Empty;
     private string _lastTickSource = "none";
-    private string _lastStateSnapshot = string.Empty;
 
     internal static bool ShouldBlockPlayerCameraInput
     {
@@ -45,7 +43,10 @@ internal sealed class UeiRuntime : MonoBehaviour
         }
 
         _active = this;
-        DontDestroyOnLoad(gameObject);
+        if (transform.parent == null)
+        {
+            DontDestroyOnLoad(gameObject);
+        }
         UeiPlugin.LogInfo("UEI runtime Awake.");
     }
 
@@ -79,58 +80,15 @@ internal sealed class UeiRuntime : MonoBehaviour
         _attachedCanvas = null;
     }
 
-    private void Update()
+    private void LateUpdate()
     {
         if (!_loggedUpdateActive)
         {
             _loggedUpdateActive = true;
-            UeiPlugin.LogInfo("UEI runtime Update active.");
-        }
-
-        Tick("UeiRuntime.Update");
-    }
-
-    private void LateUpdate()
-    {
-        if (!_loggedLateUpdateActive)
-        {
-            _loggedLateUpdateActive = true;
             UeiPlugin.LogInfo("UEI runtime LateUpdate active.");
         }
 
         Tick("UeiRuntime.LateUpdate");
-    }
-
-    internal static void TickStandalone(string source)
-    {
-        if (_active == null)
-        {
-            UeiPlugin.EnsureRuntime(source);
-        }
-
-        _active?.Tick(source);
-    }
-
-    internal static void TickFromPlayerCamera(PlayerCamera camera, string source)
-    {
-        if (_active == null)
-        {
-            UeiPlugin.EnsureRuntime(source);
-        }
-
-        UeiRuntime? runtime = _active;
-        if (runtime == null)
-        {
-            return;
-        }
-
-        if (!runtime._loggedPatchTickActive)
-        {
-            runtime._loggedPatchTickActive = true;
-            UeiPlugin.LogInfo("UEI PlayerCamera hook active.");
-        }
-
-        runtime.Tick(source, camera);
     }
 
     internal static string BuildDebugOverlayText()
@@ -177,6 +135,13 @@ internal sealed class UeiRuntime : MonoBehaviour
 
     private void Tick(string source, PlayerCamera? cameraOverride = null)
     {
+        int frame = Time.frameCount;
+        if (_lastTickFrame == frame)
+        {
+            return;
+        }
+
+        _lastTickFrame = frame;
         _lastTickSource = source;
 
         try
@@ -191,7 +156,6 @@ internal sealed class UeiRuntime : MonoBehaviour
                 UeiPlugin.LogError($"UEI runtime failed via {source}: {ex}");
             }
 
-            LogStateSnapshot(source, cameraOverride ?? GetPlayerCameraSafe(), false, "exception");
             _panel?.Hide();
         }
     }
@@ -201,9 +165,7 @@ internal sealed class UeiRuntime : MonoBehaviour
         PlayerCamera? camera = cameraOverride ?? GetPlayerCameraSafe();
         if (camera == null || camera.mainCanvas == null || camera.body == null)
         {
-            string reason = "waiting for PlayerCamera/mainCanvas/body";
-            LogHideReason(reason);
-            LogStateSnapshot(source, camera, false, reason);
+            LogHideReason("waiting for PlayerCamera/mainCanvas/body");
             _panel?.Hide();
             return;
         }
@@ -221,7 +183,6 @@ internal sealed class UeiRuntime : MonoBehaviour
         {
             LogHideReason(hideReason);
             _panel?.Hide();
-            LogStateSnapshot(source, camera, false, hideReason);
             return;
         }
 
@@ -240,14 +201,12 @@ internal sealed class UeiRuntime : MonoBehaviour
             }
 
             _panel?.ShowLoading(camera);
-            LogStateSnapshot(source, camera, true, "waiting for catalog");
             return;
         }
 
         _loggedWaitingForData = false;
         _panel?.Show(camera);
         HandleInventoryUseShortcut(camera);
-        LogStateSnapshot(source, camera, true, "shown");
     }
 
     private void HandleInventoryUseShortcut(PlayerCamera camera)
@@ -304,7 +263,6 @@ internal sealed class UeiRuntime : MonoBehaviour
         _attachedCanvas = canvas;
         _panel = new UeiPanel(canvas);
         UeiPlugin.LogInfo("UEI panel attached to the main canvas.");
-        LogStateSnapshot(_lastTickSource, GetPlayerCameraSafe(), false, "panel attached");
     }
 
     private void LogHideReason(string reason)
@@ -316,46 +274,6 @@ internal sealed class UeiRuntime : MonoBehaviour
 
         _lastHideReason = reason;
         UeiPlugin.LogInfo("UEI hidden: " + reason + ".");
-    }
-
-    private void LogStateSnapshot(string source, PlayerCamera? camera, bool shouldShow, string phase)
-    {
-        string snapshot = BuildStateSnapshot(camera, shouldShow, phase, _panel?.DescribeVisualState() ?? "none");
-        if (_lastStateSnapshot == snapshot)
-        {
-            return;
-        }
-
-        _lastStateSnapshot = snapshot;
-        UeiPlugin.LogInfo("UEI state via " + source + ": " + snapshot);
-    }
-
-    private static string BuildStateSnapshot(PlayerCamera? camera, bool shouldShow, string phase, string panelState)
-    {
-        bool radialActive = false;
-        Vector3 radialScale = Vector3.zero;
-        if (camera != null)
-        {
-            TryGetRadialMenuState(camera, out radialActive, out radialScale);
-        }
-
-        return string.Format(
-            "show={0} phase={1} cam={2} body={3} canvas={4} radialOpen={5} radialActive={6} radialScale={7:0.00}/{8:0.00}/{9:0.00} medical={10} craft={11} trade={12} console={13} panel={14}",
-            shouldShow ? 1 : 0,
-            phase,
-            camera != null ? 1 : 0,
-            camera != null && camera.body != null ? 1 : 0,
-            camera != null && camera.mainCanvas != null ? 1 : 0,
-            camera != null && camera.radialOpen ? 1 : 0,
-            radialActive ? 1 : 0,
-            radialScale.x,
-            radialScale.y,
-            radialScale.z,
-            camera != null && IsMedicalPanelOpen(camera) ? 1 : 0,
-            camera != null && IsActive(camera.craftingPanel) ? 1 : 0,
-            camera != null && IsActive(camera.tradeMenu) ? 1 : 0,
-            IsConsoleOpen() ? 1 : 0,
-            panelState);
     }
 
     private static PlayerCamera? GetPlayerCameraSafe()
@@ -465,89 +383,5 @@ internal static class UeiPlayerCameraInputPatch
     private static bool Prefix()
     {
         return !UeiRuntime.ShouldBlockPlayerCameraInput;
-    }
-
-    private static void Postfix(PlayerCamera __instance)
-    {
-        UeiRuntime.TickFromPlayerCamera(__instance, "PlayerCamera.HandleInput");
-    }
-}
-
-[HarmonyPatch(typeof(PlayerCamera), "HandleRadialMenu")]
-internal static class UeiPlayerCameraRadialPatch
-{
-    private static void Postfix(PlayerCamera __instance)
-    {
-        UeiRuntime.TickFromPlayerCamera(__instance, "PlayerCamera.HandleRadialMenu");
-    }
-}
-
-[HarmonyPatch(typeof(PlayerCamera), "HandleWoundView")]
-internal static class UeiPlayerCameraWoundPatch
-{
-    private static void Postfix(PlayerCamera __instance)
-    {
-        UeiRuntime.TickFromPlayerCamera(__instance, "PlayerCamera.HandleWoundView");
-    }
-}
-
-[HarmonyPatch(typeof(GlobalDark), "Update")]
-internal static class UeiGlobalDarkUpdatePatch
-{
-    private static void Postfix()
-    {
-        UeiRuntime.TickStandalone("GlobalDark.Update");
-    }
-}
-
-internal sealed class UeiProbeListener : MonoBehaviour
-{
-    private bool _loggedUpdate;
-    private bool _loggedOnGui;
-
-    private void Awake()
-    {
-        UeiPlugin.LogInfo("UEI probe Awake.");
-    }
-
-    private void OnEnable()
-    {
-        UeiPlugin.LogInfo("UEI probe OnEnable.");
-    }
-
-    private void Start()
-    {
-        UeiPlugin.LogInfo("UEI probe Start.");
-    }
-
-    private void OnDisable()
-    {
-        UeiPlugin.LogInfo("UEI probe OnDisable.");
-    }
-
-    private void OnDestroy()
-    {
-        UeiPlugin.LogInfo("UEI probe OnDestroy.");
-        UeiPlugin.ClearProbe(this);
-    }
-
-    private void Update()
-    {
-        if (!_loggedUpdate)
-        {
-            _loggedUpdate = true;
-            UeiPlugin.LogInfo("UEI probe Update active.");
-        }
-
-        UeiRuntime.TickStandalone("UeiProbeListener.Update");
-    }
-
-    private void OnGUI()
-    {
-        if (!_loggedOnGui)
-        {
-            _loggedOnGui = true;
-            UeiPlugin.LogInfo("UEI probe OnGUI active; visual debug overlay disabled.");
-        }
     }
 }

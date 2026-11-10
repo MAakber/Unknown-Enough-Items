@@ -7,7 +7,7 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <AssemblyName>UEI</AssemblyName>
     <RootNamespace>UEI</RootNamespace>
-    <Version>1.2.1</Version>
+    <Version>1.2.2</Version>
     <Authors>Aakber (小叶子)</Authors>
     <Company>Aakber (小叶子)</Company>
     <Description>Unknown Enough Items inventory index helper for Casualties Unknown Demo.</Description>

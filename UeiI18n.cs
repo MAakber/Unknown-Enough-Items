@@ -264,7 +264,19 @@ internal static class UeiI18n
         }
 
         string value = SafeString(() => Locale.GetItem(localeKey), string.Empty);
-        return IsResolvedLocaleValue(value, localeKey) ? value : fallback;
+        if (IsResolvedLocaleValue(value, localeKey))
+        {
+            return value;
+        }
+
+        // 纯查询，不传 fallback，避免 LocaleRegistry.Register 用英文覆盖中文
+        string cu = CuCoreLibHelper.GetLocaleText("item", localeKey);
+        if (IsResolvedLocaleValue(cu, localeKey))
+        {
+            return cu;
+        }
+
+        return fallback;
     }
 
     public static string OtherText(string localeKey, string fallback)
@@ -275,7 +287,24 @@ internal static class UeiI18n
         }
 
         string value = SafeString(() => Locale.GetOther(localeKey), string.Empty);
-        return IsResolvedLocaleValue(value, localeKey) ? value : fallback;
+        if (IsResolvedLocaleValue(value, localeKey))
+        {
+            return value;
+        }
+
+        string cu = CuCoreLibHelper.GetLocaleText("other", localeKey);
+        if (IsResolvedLocaleValue(cu, localeKey))
+        {
+            return cu;
+        }
+
+        string liquid = CuCoreLibHelper.GetLocaleText("liquid", localeKey);
+        if (IsResolvedLocaleValue(liquid, localeKey))
+        {
+            return liquid;
+        }
+
+        return fallback;
     }
 
     public static string CategoryLabel(string categoryKey)
