@@ -7,7 +7,7 @@
 **A JEI-style item, liquid, and recipe helper for `Casualties Unknown Demo`.**
 **一个用于 `Casualties Unknown Demo` 的 JEI 风格物品、液体与配方查询辅助插件。**
 
-![Version](https://img.shields.io/badge/version-1.1.x-blue)
+![Version](https://img.shields.io/badge/version-1.2.4-blue)
 ![BepInEx](https://img.shields.io/badge/BepInEx-plugin-f6c343)
 ![Game](https://img.shields.io/badge/game-Casualties%20Unknown%20Demo-2f2f2f)
 ![UI](https://img.shields.io/badge/UI-%E4%B8%AD%E6%96%87%20%7C%20English-orange)
@@ -16,9 +16,15 @@
 </div>
 
 > [!WARNING]
-> UEI is currently an early WIP mod. It has only been tested in the local `Casualties Unknown Demo v6.1`  BepInEx environment used during development. Compatibility with other game versions is not guaranteed.
+> UEI is an early WIP mod. Its original test baseline was `Casualties Unknown Demo v6.1`. The current full-game/CUCoreLib integration is a test candidate; see the linked validation records before treating it as a verified release.
 >
-> UEI 目前仍是早期开发版本，只在开发时使用的本地 `Casualties Unknown Demo v6.1` BepInEx 环境中测试过。其他游戏版本的兼容性未知。
+> UEI 目前仍是早期开发版本，原始测试基线为 `Casualties Unknown Demo v6.1`。当前正式版 / CUCoreLib 整合为待实测候选，已验证范围与限制见下方记录。
+
+`1.2.4` 本地整合保留 RshLib / SexMod，并优先使用 CUCoreLib 的公开接口读取物品、图标、联机角色和生成物品。
+Together 客户端的原版物品请求由服务器处理；模组物品需由房主生成，客户端会显示限制提示。
+“已请求”仅表示提交了命令，不代表服务器已成功执行。`cuspawn` 尚未启用为自动后备，需单独验证权限、作弊规则与同步行为。
+审查依据、贡献归属、验证范围见 [PR #3 / #4 整合记录](docs/pr-3-4-integration.md)。
+CUCoreLib 专项验证见 [公开接口与测试计划](docs/cucore-public-api-test-plan.md)；测试插件位于仓库之外，不随 UEI 发布。
 
 ## 目录 / Contents
 
