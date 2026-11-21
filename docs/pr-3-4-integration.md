@@ -11,8 +11,10 @@
 - The CUCoreLib/SexMod support and UI/catalog optimization proposals came from
   contributor `dfgger433` in PR #3/#4. This integration retains those features,
   with the corrections below, alongside previously developed local fixes.
-- Both PRs remain open. This work does not publish comments, push commits, merge,
-  or close either PR. This file records the local integration, not a release.
+- The maintainer explicitly approved merging the conservative 1.2.4 scope on
+  2026-11-21, with remaining host/client and persistence tests deferred. The
+  original PR #4 history (including #3) is retained alongside the reviewed fixes.
+  This record describes validation scope, not a claim of full multiplayer testing.
 
 ## Corrections applied
 
