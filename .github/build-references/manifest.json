@@ -1,0 +1,45 @@
+{
+  "format": 1,
+  "files": {
+    "BepInEx/core/BepInEx.dll": {
+      "size": 128512,
+      "sha256": "8255b28902886085c578b9e427d3073c97002db85176d2090cdeda90ef14ce70"
+    },
+    "BepInEx/core/0Harmony.dll": {
+      "size": 204800,
+      "sha256": "1a21cc03424fc82c3dd1346905d16494536b9595ae4162228d99fb7c285c1031"
+    },
+    "CasualtiesUnknown_Data/Managed/Assembly-CSharp.dll": {
+      "size": 1033216,
+      "sha256": "48c7f2296fc4a659faae3b1822884ca5b7ff73d6767ef159e6a6c2bc0b2d38f1"
+    },
+    "CasualtiesUnknown_Data/Managed/Unity.TextMeshPro.dll": {
+      "size": 380416,
+      "sha256": "1c133da5f50d7dad62cee57cb02c6db21c6d15221bc80f0748b7c38049e38cd1"
+    },
+    "CasualtiesUnknown_Data/Managed/UnityEngine.dll": {
+      "size": 126896,
+      "sha256": "4b430c7be335874f8f5f6e70c97f684f5c033deceda5701cd6c1505c844c6a41"
+    },
+    "CasualtiesUnknown_Data/Managed/UnityEngine.CoreModule.dll": {
+      "size": 1393584,
+      "sha256": "88bc98e7aafd120747dfdc90581ca8cee0aa2734b7a101122be66f543122a963"
+    },
+    "CasualtiesUnknown_Data/Managed/UnityEngine.InputLegacyModule.dll": {
+      "size": 39336,
+      "sha256": "dac12c4e21e3a0653ae2c0a273880b65366b4e61626ae281bff0aaf4478c2f47"
+    },
+    "CasualtiesUnknown_Data/Managed/UnityEngine.TextRenderingModule.dll": {
+      "size": 39336,
+      "sha256": "e8ab28e29cd3dc25755e5d1c36e4a9f6caa90ab817fc3bf35d9b9a98876923a0"
+    },
+    "CasualtiesUnknown_Data/Managed/UnityEngine.UI.dll": {
+      "size": 265216,
+      "sha256": "bb7a4dea49cbaab93483f8b300ed79dd26ba61598ba290301d07ad8a38c8d7fd"
+    },
+    "CasualtiesUnknown_Data/Managed/UnityEngine.UIModule.dll": {
+      "size": 36784,
+      "sha256": "1cc1d7f5c8ad299ecb9213e989c6568ced8c9173c64ef60f67ac9c66787dc5d8"
+    }
+  }
+}

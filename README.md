@@ -96,6 +96,13 @@ BepInEx/plugins/UEI/UEI.build.dll
 
 ## 编译方法 / Compile Method
 
+GitHub Actions 自动运行回归检查，并为本仓库提交生成可下载的编译包。
+维护者推送与源码版本一致的 `vX.Y.Z` 标签后，会自动构建并发布 GitHub Release。
+发布规则、构建引用与维护方法见 [GitHub 自动化说明](docs/github-automation.md)。
+
+GitHub Actions checks pull requests, builds trusted repository commits, and
+publishes releases for matching version tags. See the automation guide above.
+
 Regular players should use the release DLL once releases are published.
 
 普通玩家后续可以直接下载 Release 页面中的 DLL，不需要自己编译。

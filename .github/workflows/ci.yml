@@ -1,0 +1,102 @@
+name: UEI CI and Release
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
+jobs:
+  checks:
+    name: Version and regression checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Validate x.x.x version and optional release tag
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ "$REF_TYPE" == tag ]]; then
+            python3 scripts/ci.py version --tag "$REF_NAME"
+          else
+            python3 scripts/ci.py version
+          fi
+      - name: Test release packaging and failure guards
+        run: python3 -m unittest discover -s tests/automation -v
+      - name: Run linked production-code regressions
+        run: dotnet run --project tests/UEI.RegressionTests.csproj -c Release -- "$GITHUB_WORKSPACE"
+
+  build:
+    name: Build and package UEI
+    needs: checks
+    # Fork PRs never receive the key or compile against private game references.
+    if: github.event_name != 'pull_request' && github.repository == 'MAakber/Unknown-Enough-Items'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Decrypt and verify pinned build references
+        env:
+          UEI_BUILD_REFERENCES_KEY: ${{ secrets.UEI_BUILD_REFERENCES_KEY }}
+        run: python3 scripts/ci.py decrypt-references --output "$RUNNER_TEMP/uei-game"
+      - name: Compile against actual game assemblies
+        run: python3 scripts/ci.py build --game-root "$RUNNER_TEMP/uei-game" --output "$RUNNER_TEMP/uei-build"
+      - name: Package and verify UEI-only release files
+        run: python3 scripts/ci.py package --dll "$RUNNER_TEMP/uei-build/UEI.dll" --output artifacts/release
+      - name: Upload downloadable build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: UEI-${{ needs.checks.outputs.version }}-${{ github.sha }}
+          path: artifacts/release/
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish version-tag release
+    needs: [checks, build]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.repository == 'MAakber/Unknown-Enough-Items'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: UEI-${{ needs.checks.outputs.version }}-${{ github.sha }}
+          path: artifacts/release/
+      - name: Verify provenance and publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/ci.py publish --output artifacts/release --tag "$RELEASE_TAG"
