@@ -32,8 +32,23 @@ git push origin v1.2.5
 不要移动已经发布的标签。
 
 Release 包含 `UEI-版本号.zip`、`UEI.dll`、`SHA256SUMS.txt` 和 `build-info.json`。
-ZIP 含 Gale 可识别的 manifest、256×256 封面、安装说明、许可证和一份 UEI DLL。
+ZIP 含 Gale 可识别的 manifest、256×256 图标、README、CHANGELOG、许可证和一份 UEI DLL。
+CHANGELOG 从当前版本的 `packaging/RELEASE-NOTES.md` 生成，避免维护两份更新内容。
+打包检查会核对图标与源码文件一致，并核对 CHANGELOG 与当前版本的更新说明一致。
 不分发游戏 DLL、BepInEx、Together 或临时测试插件。
+
+## 图标和 Thunderstore 同步
+
+`packaging/icon.png` 是打包使用的 256×256 PNG；`packaging/icon-D-1024.png`
+是 README 展示与后续编辑使用的高清图。README 功能截图仍位于 `image/README/`。
+草稿、旧封面备份、校验包和编译产物保存在被 Git 忽略的 `artifacts/` 中。
+
+GitHub 源码图标在提交推送后更新，已发布 ZIP 不会自动随源码修改。
+Thunderstore 的已发布版本不可修改图标；只有 README 与 CHANGELOG 可原地编辑。
+更新图标需要提高版本号、用同一团队上传新包，并刷新 Gale 模组列表核对实际显示。
+规则见 [Thunderstore 更新说明](https://wiki.thunderstore.io/mods/updating-a-package)。
+
+自动 GitHub Release 的标签与源码版本必须一致，仍按上面的维护者步骤发布。
 
 ## 编译引用的来源与更新
 

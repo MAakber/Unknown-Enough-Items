@@ -181,6 +181,7 @@ def package(dll: Path, output: Path, root: Path = ROOT) -> None:
                 "description": "Item, liquid and recipe browser for Casualties Unknown.",
                 "dependencies": ["BepInEx-BepInExPack-5.4.2305"]}
     entries = {"BepInEx/plugins/UEI/UEI.dll": payload, "icon.png": icon,
+               "CHANGELOG.md": (f"# {version}\n\n" + read_release_notes(root)).encode("utf-8"),
                "manifest.json": (json.dumps(manifest, indent=2) + "\n").encode(),
                "README.md": (root / "packaging/README.md").read_text(encoding="utf-8").replace("@VERSION@", version).encode(),
                "LICENSE": (root / "LICENSE").read_bytes()}
@@ -221,11 +222,16 @@ def verify_package(output: Path, root: Path = ROOT) -> None:
     if info["version"] != version or info["source_commit"] != source_commit(root):
         raise ValueError("Release provenance does not match the checked-out source.")
     with zipfile.ZipFile(output / f"UEI-{version}.zip") as archive:
-        expected = ["BepInEx/plugins/UEI/UEI.dll", "LICENSE", "README.md", "icon.png", "manifest.json"]
+        expected = ["BepInEx/plugins/UEI/UEI.dll", "CHANGELOG.md", "LICENSE", "README.md", "icon.png", "manifest.json"]
         if sorted(archive.namelist()) != expected or archive.testzip() is not None:
             raise ValueError("Release ZIP contains unexpected/missing files or is corrupt.")
         if archive.read("BepInEx/plugins/UEI/UEI.dll") != (output / "UEI.dll").read_bytes():
             raise ValueError("ZIP and standalone UEI DLL differ.")
+        if archive.read("icon.png") != (root / "packaging/icon.png").read_bytes():
+            raise ValueError("ZIP icon does not match the selected source icon.")
+        changelog = (f"# {version}\n\n" + read_release_notes(root)).encode("utf-8")
+        if archive.read("CHANGELOG.md") != changelog:
+            raise ValueError("ZIP changelog does not match this version's release notes.")
         manifest = json.loads(archive.read("manifest.json"))
         if manifest["version_number"] != version or manifest["dependencies"] != ["BepInEx-BepInExPack-5.4.2305"]:
             raise ValueError("Incorrect package version/dependencies.")

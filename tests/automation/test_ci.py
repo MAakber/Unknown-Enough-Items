@@ -110,6 +110,24 @@ class AutomationChecks(unittest.TestCase):
             self.assertIn(b"1.2.4", archive.read("README.md"))
             self.assertNotIn(b"@VERSION@", archive.read("README.md"))
             self.assertEqual(archive.read("BepInEx/plugins/UEI/UEI.dll"), self.dll.read_bytes())
+            self.assertEqual(archive.read("icon.png"), (self.root / "packaging/icon.png").read_bytes())
+            self.assertEqual(archive.read("CHANGELOG.md").decode("utf-8"),
+                             "# 1.2.4\n\n" + ci.read_release_notes(self.root))
+
+    def test_reject_changed_icon_or_changelog_even_with_valid_checksums(self):
+        for name in ("icon.png", "CHANGELOG.md"):
+            with self.subTest(name=name):
+                self.make_package()
+                path = self.output / "UEI-1.2.4.zip"
+                with zipfile.ZipFile(path) as archive:
+                    files = {entry: archive.read(entry) for entry in archive.namelist()}
+                files[name] = b"different presentation asset"
+                with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+                    for entry, data in files.items():
+                        archive.writestr(entry, data)
+                self.refresh_checksums()
+                with self.assertRaises(ValueError):
+                    ci.verify_package(self.output, self.root)
 
     def test_reject_extra_dll_in_release_directory(self):
         self.make_package()

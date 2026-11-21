@@ -20,7 +20,7 @@ public sealed partial class UeiPlugin : BaseUnityPlugin
     public const string PluginName = "UEI - Unknown Enough Items";
     public const string PluginVersionBase = "1.2";
 #if !UEI_GENERATED_VERSION
-    public const string PluginVersion = PluginVersionBase + ".4";
+    public const string PluginVersion = PluginVersionBase + ".5";
 #endif
     public const string PluginAuthor = "Aakber (小叶子)";
 

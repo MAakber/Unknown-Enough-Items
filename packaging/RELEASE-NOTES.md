@@ -1,33 +1,27 @@
-<!-- version: 1.2.4 -->
+<!-- version: 1.2.5 -->
 
-本次更新适配游戏正式版与 Together 联机，补充第三方物品模组兼容，并修复作弊模式的权限判断与点击行为。
+本版更新 UEI 的平台图标、安装说明与打包内容，功能沿用 1.2.4。
 
-## 新增与适配
+## 图标与文档
 
-- 适配游戏正式版，更新 Together（CasualtiesMP）联机兼容逻辑。
-- 新增 CUCoreLib、SexMod 物品适配，整合 RshLib 支持，完善模组物品、图标与配方的读取。
-- 作弊操作栏新增一键复活按钮。
-- 提供带封面和安装说明的 ZIP 安装包，可直接导入 Gale。
+- 使用 1:1 洞穴荧光款 UEI 图标，提供 256×256 平台图标与 1024×1024 高清图。
+- GitHub README 使用同款图标，完善 Gale 安装入口和手动安装说明。
+- 自动安装包加入 CHANGELOG.md，并核对包内图标与更新说明，减少不同发布渠道的内容差异。
+- 将未使用的旧封面移至本地备份；仓库继续保留源码、构建配置、测试与使用文档。
 
-## 修复与优化
+## 兼容范围
 
-- 修复启用作弊模式或左键领取物品时，右侧配方详情被意外打开的问题；右键查看用途的功能保留。
-- 修正 Together 客户端的作弊权限判断，解决已有服务器管理员权限仍显示“无权限”的问题。
-- Together 客户端领取原版物品改为向服务器提交请求，并区分“请求已发送”与“发放完成”的提示。
-- 缓存可选模组检测结果，减少重复扫描；优化物品目录和界面刷新，减少同一帧内的重复工作。
-- 调整本地化读取，避免缺失翻译查询修改联机语言数据；补充界面对象销毁后的检查与重建，保留主菜单恢复机制。
+- 沿用 1.2.4 的游戏正式版与 Together、CUCoreLib、RshLib、SexMod 兼容逻辑。
+- Together 客户端的模组物品仍需房主生成；自动 cuspawn 尚未启用。
+- 双端同步、权限边界以及保存/重连仍需进一步实机验证。
 
-## 已知限制
+## 安装
 
-- Together 客户端暂不支持直接领取模组物品，请由房主生成；本版本未启用自动 `cuspawn`。
-- 双端物品同步、权限边界和保存/重连仍待进一步实机验证。
+在 Gale 的 Casualties: Unknown 模组列表搜索 UEI 并更新，或从 GitHub Release 下载 ZIP 后导入。
+手动安装时先安装 BepInEx 5，再将 UEI.dll 放入 BepInEx/plugins/UEI/。
+升级前关闭游戏，并只保留一份 UEI DLL。
 
-## 下载与安装
-
-- **Gale 用户：** 下载 [UEI-1.2.4.zip](https://github.com/MAakber/Unknown-Enough-Items/releases/download/v1.2.4/UEI-1.2.4.zip) 并导入档案。
-- **手动安装：** 先安装 BepInEx 5，再将 `UEI.dll` 放入 `BepInEx/plugins/UEI/`。升级前关闭游戏，并确保插件目录只保留一份 UEI DLL。
-- Together、CUCoreLib、RshLib 和 SexMod 均为可选适配，无需全部安装。
-
-感谢 @dfgger433 在 [#2](https://github.com/MAakber/Unknown-Enough-Items/pull/2)、[#3](https://github.com/MAakber/Unknown-Enough-Items/pull/3)、[#4](https://github.com/MAakber/Unknown-Enough-Items/pull/4) 中提供的适配贡献。
-
-**完整变更：** [V1.1.10 → v1.2.4](https://github.com/MAakber/Unknown-Enough-Items/compare/V1.1.10...v1.2.4)
+Version 1.2.5 updates the square cave-glow icon, installation documentation and
+packaged changelog. Gameplay behavior and multiplayer limitations remain those
+of 1.2.4. Custom mod items on Together clients still require host spawning;
+automatic cuspawn is disabled, and two-peer/save/reconnect validation is pending.

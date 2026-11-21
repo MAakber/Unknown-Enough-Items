@@ -1,19 +1,23 @@
 <div align="center">
 
-<img src="https://socialify.git.ci/MAakber/Unknown-Enough-Items/image?description=1&font=Inter&forks=1&issues=1&language=1&name=1&owner=1&pattern=Plus&pulls=1&stargazers=1&theme=Auto" alt="Unknown Enough Items social preview">
+<img src="packaging/icon-D-1024.png" width="192" height="192" alt="UEI — cave glow icon">
 
 # UEI - Unknown Enough Items
 
-**A JEI-style item, liquid, and recipe helper for `Casualties Unknown Demo`.**
-**一个用于 `Casualties Unknown Demo` 的 JEI 风格物品、液体与配方查询辅助插件。**
+**A JEI-style item, liquid, and recipe helper for `Casualties: Unknown`.**
+**一个用于 `Casualties: Unknown` 的 JEI 风格物品、液体与配方查询辅助插件。**
 
-![Version](https://img.shields.io/badge/version-1.2.4-blue)
+![Version](https://img.shields.io/badge/version-1.2.5-blue)
 ![BepInEx](https://img.shields.io/badge/BepInEx-plugin-f6c343)
-![Game](https://img.shields.io/badge/game-Casualties%20Unknown%20Demo-2f2f2f)
+![Game](https://img.shields.io/badge/game-Casualties%3A%20Unknown-2f2f2f)
 ![UI](https://img.shields.io/badge/UI-%E4%B8%AD%E6%96%87%20%7C%20English-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 </div>
+
+`1.2.5` 更新图标、安装说明和自动打包的更新日志，沿用 `1.2.4` 的功能与联机限制。
+Version `1.2.5` updates the icon, installation documentation and packaged changelog.
+Gameplay behavior and multiplayer limitations remain those of `1.2.4`.
 
 > [!WARNING]
 > UEI is an early WIP mod. Its original test baseline was `Casualties Unknown Demo v6.1`. The current full-game/CUCoreLib integration is a test candidate; see the linked validation records before treating it as a verified release.
@@ -51,9 +55,12 @@ The mod reads runtime game data directly from:
 - `Liquids.Registry`
 - `Recipes.recipes`
 
-It does not bundle game assets, game assemblies, BepInEx, Harmony, Unity assemblies, or TextMeshPro assemblies.
+Release packages do not bundle game assets, game assemblies, BepInEx, Harmony,
+Unity assemblies, or TextMeshPro assemblies. CI uses encrypted compile-time
+references as described in the [automation guide](docs/github-automation.md).
 
-本项目不包含游戏资源、游戏程序集、BepInEx、Harmony、Unity 程序集或 TextMeshPro 程序集；这些仅作为本地构建和运行依赖。
+发布安装包不包含游戏资源、游戏程序集、BepInEx、Harmony、Unity 程序集或 TextMeshPro 程序集。
+仓库中的 CI 编译引用经过加密，仅用于构建；来源和管理方式见自动化说明。
 
 ## 功能 / Features
 
@@ -67,32 +74,49 @@ It does not bundle game assets, game assemblies, BepInEx, Harmony, Unity assembl
 | 配方材料和结果可点击跳转。            | Recipe ingredients and results can jump to related UEI entries.         | -                                              |
 | 泛材料会显示可用物品 / 液体候选列表。 | Generic ingredients show matching item/liquid candidates.               | ![1779440090021](image/README/1779440090021.png) |
 | 可跳转到原版制作面板并选中对应配方。  | Can jump to the original crafting panel and select the matching recipe. | -                                              |
-| 适配多人联机模组 KrokMP。             | Adapts to the KrokMP multiplayer mod.                                   | ![1779439469003](image/README/1779439469003.png) |
+| 支持联机权限判断与物品请求策略。       | Supports multiplayer permission checks and item requests.              | ![早期联机界面](image/README/1779439469003.png) |
 | 支持中文和 English。                  | Supports Chinese and English.                                           | -                                              |
+
+截图来自早期 Demo，用于展示查询界面。当前正式版与 Together 的验证范围见上方兼容记录。
+Screenshots show the earlier demo UI. See the linked records for current full-game and Together validation.
 
 ## 安装 / Install
 
-1. Install BepInEx for `Casualties Unknown Demo`.
-2. Copy the compiled DLL to:
+Install UEI from the Casualties: Unknown mod list in Gale. The required BepInEx
+dependency is installed by the manager. The [Thunderstore page](https://thunderstore.io/c/casualties-unknown/p/MAakber/UEI/)
+also offers an installation link and ZIP download.
+
+For manual installation:
+
+1. Install BepInEx 5 for `Casualties: Unknown`.
+2. Download the ZIP or DLL from [GitHub Releases](https://github.com/MAakber/Unknown-Enough-Items/releases)
+   and place the release DLL at:
 
 ```text
-BepInEx/plugins/UEI/UEI.build.dll
+BepInEx/plugins/UEI/UEI.dll
 ```
 
 3. Launch the game.
 4. Open the native inventory/radial backpack UI. UEI appears beside it when the UI state is supported.
 
-步骤：
+Gale 用户在 Casualties: Unknown 模组列表搜索并安装 UEI，管理器会处理 BepInEx 依赖。
+也可从上方 Thunderstore 页面下载 ZIP 并导入。手动安装步骤：
 
-1. 先为 `Casualties Unknown Demo` 安装 BepInEx。
-2. 将编译好的 DLL 放到：
+1. 先为 `Casualties: Unknown` 安装 BepInEx 5。
+2. 从 GitHub Releases 下载 ZIP 或 DLL，将发布 DLL 放到：
 
 ```text
-BepInEx/plugins/UEI/UEI.build.dll
+BepInEx/plugins/UEI/UEI.dll
 ```
 
 3. 启动游戏。
 4. 打开原版物品栏 / 径向背包界面；当界面状态支持时，UEI 会显示在旁边。
+
+升级前请关闭游戏，并只保留一份 UEI DLL；本地编译生成的 `UEI.build.dll`
+与发布包里的 `UEI.dll` 是同一插件，不应同时安装。
+
+Close the game before updating and keep only one UEI DLL. The locally built
+`UEI.build.dll` and released `UEI.dll` are the same plugin; install one copy.
 
 ## 编译方法 / Compile Method
 
@@ -103,9 +127,9 @@ GitHub Actions 自动运行回归检查，并为本仓库提交生成可下载�
 GitHub Actions checks pull requests, builds trusted repository commits, and
 publishes releases for matching version tags. See the automation guide above.
 
-Regular players should use the release DLL once releases are published.
+Regular players should use the published release ZIP or DLL.
 
-普通玩家后续可以直接下载 Release 页面中的 DLL，不需要自己编译。
+普通玩家可以直接下载 Release 页面中的 ZIP 或 DLL，不需要自己编译。
 
 If you need to compile from source manually, prepare:
 
