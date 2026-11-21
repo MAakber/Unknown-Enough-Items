@@ -21,7 +21,7 @@ internal sealed class UeiRuntime : MonoBehaviour
     private int _lastInventoryUseShortcutFrame = -1;
     private string _lastHideReason = string.Empty;
     private string _lastTickSource = "none";
-    private string _lastStateSnapshot = string.Empty;
+    private int _lastShownFrame = -1;
 
     internal static bool ShouldBlockPlayerCameraInput
     {
@@ -191,7 +191,6 @@ internal sealed class UeiRuntime : MonoBehaviour
                 UeiPlugin.LogError($"UEI runtime failed via {source}: {ex}");
             }
 
-            LogStateSnapshot(source, cameraOverride ?? GetPlayerCameraSafe(), false, "exception");
             _panel?.Hide();
         }
     }
@@ -203,7 +202,7 @@ internal sealed class UeiRuntime : MonoBehaviour
         {
             string reason = "waiting for PlayerCamera/mainCanvas/body";
             LogHideReason(reason);
-            LogStateSnapshot(source, camera, false, reason);
+            _lastShownFrame = -1;
             _panel?.Hide();
             return;
         }
@@ -220,10 +219,23 @@ internal sealed class UeiRuntime : MonoBehaviour
         if (!shouldShow)
         {
             LogHideReason(hideReason);
+            _lastShownFrame = -1;
             _panel?.Hide();
-            LogStateSnapshot(source, camera, false, hideReason);
             return;
         }
+
+        // Keep every recovery hook and reevaluate visibility on every call: an
+        // input hook may open/close the inventory after Update in the same frame.
+        // Only catalog/grid work is deduplicated while visibility stays unchanged.
+        if (_lastShownFrame == Time.frameCount)
+        {
+            if (!_loggedWaitingForData)
+            {
+                HandleInventoryUseShortcut(camera);
+            }
+            return;
+        }
+        _lastShownFrame = Time.frameCount;
 
         if (!_loggedFirstShow)
         {
@@ -240,14 +252,12 @@ internal sealed class UeiRuntime : MonoBehaviour
             }
 
             _panel?.ShowLoading(camera);
-            LogStateSnapshot(source, camera, true, "waiting for catalog");
             return;
         }
 
         _loggedWaitingForData = false;
         _panel?.Show(camera);
         HandleInventoryUseShortcut(camera);
-        LogStateSnapshot(source, camera, true, "shown");
     }
 
     private void HandleInventoryUseShortcut(PlayerCamera camera)
@@ -295,7 +305,7 @@ internal sealed class UeiRuntime : MonoBehaviour
 
     private void EnsurePanel(Canvas canvas)
     {
-        if (_panel != null && _attachedCanvas == canvas)
+        if (_panel != null && _panel.IsAlive && _attachedCanvas == canvas)
         {
             return;
         }
@@ -303,8 +313,8 @@ internal sealed class UeiRuntime : MonoBehaviour
         _panel?.Destroy();
         _attachedCanvas = canvas;
         _panel = new UeiPanel(canvas);
+        _lastShownFrame = -1;
         UeiPlugin.LogInfo("UEI panel attached to the main canvas.");
-        LogStateSnapshot(_lastTickSource, GetPlayerCameraSafe(), false, "panel attached");
     }
 
     private void LogHideReason(string reason)
@@ -316,46 +326,6 @@ internal sealed class UeiRuntime : MonoBehaviour
 
         _lastHideReason = reason;
         UeiPlugin.LogInfo("UEI hidden: " + reason + ".");
-    }
-
-    private void LogStateSnapshot(string source, PlayerCamera? camera, bool shouldShow, string phase)
-    {
-        string snapshot = BuildStateSnapshot(camera, shouldShow, phase, _panel?.DescribeVisualState() ?? "none");
-        if (_lastStateSnapshot == snapshot)
-        {
-            return;
-        }
-
-        _lastStateSnapshot = snapshot;
-        UeiPlugin.LogInfo("UEI state via " + source + ": " + snapshot);
-    }
-
-    private static string BuildStateSnapshot(PlayerCamera? camera, bool shouldShow, string phase, string panelState)
-    {
-        bool radialActive = false;
-        Vector3 radialScale = Vector3.zero;
-        if (camera != null)
-        {
-            TryGetRadialMenuState(camera, out radialActive, out radialScale);
-        }
-
-        return string.Format(
-            "show={0} phase={1} cam={2} body={3} canvas={4} radialOpen={5} radialActive={6} radialScale={7:0.00}/{8:0.00}/{9:0.00} medical={10} craft={11} trade={12} console={13} panel={14}",
-            shouldShow ? 1 : 0,
-            phase,
-            camera != null ? 1 : 0,
-            camera != null && camera.body != null ? 1 : 0,
-            camera != null && camera.mainCanvas != null ? 1 : 0,
-            camera != null && camera.radialOpen ? 1 : 0,
-            radialActive ? 1 : 0,
-            radialScale.x,
-            radialScale.y,
-            radialScale.z,
-            camera != null && IsMedicalPanelOpen(camera) ? 1 : 0,
-            camera != null && IsActive(camera.craftingPanel) ? 1 : 0,
-            camera != null && IsActive(camera.tradeMenu) ? 1 : 0,
-            IsConsoleOpen() ? 1 : 0,
-            panelState);
     }
 
     private static PlayerCamera? GetPlayerCameraSafe()

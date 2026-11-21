@@ -9,6 +9,14 @@ using UnityEngine.UI;
 
 internal sealed class UeiPanel
 {
+    private enum CheatActionResult
+    {
+        Failed,
+        Completed,
+        RequestSent,
+        HostRequired,
+    }
+
     private const int Columns = 6;
     private const int Rows = 10;
     private const int PageSize = Columns * Rows;
@@ -24,6 +32,7 @@ internal sealed class UeiPanel
     private const float SearchHorizontalPadding = 5f;
     private const float SearchVerticalPadding = 2f;
     private const float SettingsButtonWidth = 22f;
+    private const float ReviveButtonWidth = 22f;
     private const int RecipePageSize = 2;
     private const float DetailPanelWidth = 310f;
     private const float DetailGap = 12f;
@@ -48,6 +57,7 @@ internal sealed class UeiPanel
     private static readonly Color TextColor = new(0.92f, 0.92f, 0.92f, 1f);
     private static readonly Color MutedTextColor = new(0.70f, 0.72f, 0.74f, 1f);
     private static bool _ownsNativeTooltip;
+    private static readonly Vector3[] PointerCornerBuffer = new Vector3[4];
 
     private readonly Canvas _canvas;
     private readonly int _uiLayer;
@@ -66,6 +76,7 @@ internal sealed class UeiPanel
     private readonly GridLayoutGroup _grid;
     private readonly RectTransform _gridContent;
     private readonly TMP_InputField _searchInput;
+    private GameObject _reviveButton = null!;
     private TextMeshProUGUI _pageText = null!;
     private TextMeshProUGUI _categoryText = null!;
     private TextMeshProUGUI _detailModeText = null!;
@@ -92,6 +103,7 @@ internal sealed class UeiPanel
     private int _lastRecipePageCount = 1;
     private bool _dirty = true;
     private bool _detailDirty = true;
+    private bool _loadingShown;
     private bool _settingsOpen;
     private bool _wantsVisible;
     private float _animationProgress;
@@ -222,7 +234,9 @@ internal sealed class UeiPanel
         Hide();
     }
 
-    public bool IsTextInputFocused => _root.activeInHierarchy && _animationProgress > 0.98f && _searchInput.isFocused;
+    public bool IsAlive => _root != null && _canvas != null;
+
+    public bool IsTextInputFocused => IsAlive && _root.activeInHierarchy && _animationProgress > 0.98f && _searchInput.isFocused;
 
     public bool IsPointerOverPanel
     {
@@ -239,7 +253,7 @@ internal sealed class UeiPanel
                 _lastPointerCheckFrame = frame;
                 _lastPointerOverPanel = false;
 
-                if (!_root.activeInHierarchy || _animationProgress <= 0.02f)
+                if (!IsAlive || !_root.activeInHierarchy || _animationProgress <= 0.02f)
                 {
                     return false;
                 }
@@ -262,8 +276,13 @@ internal sealed class UeiPanel
     public void Show(PlayerCamera camera)
     {
         BeginShow();
-
-        _root.transform.SetAsLastSibling();
+        if (_loadingShown)
+        {
+            _loadingShown = false;
+            _dirty = true;
+            _detailDirty = true;
+        }
+        UpdateCheatActionBar();
         UpdatePanelSize(camera);
         HandlePagingInput();
 
@@ -290,14 +309,17 @@ internal sealed class UeiPanel
     public void ShowLoading(PlayerCamera camera)
     {
         BeginShow();
-
-        _root.transform.SetAsLastSibling();
+        UpdateCheatActionBar();
         UpdatePanelSize(camera);
-        ClearChildren(_gridContent);
-        _pageText.text = "...";
-        _categoryText.text = UeiI18n.T("category.all");
-        _selectionText.text = UeiI18n.T("loading.items");
-        _detailPanel.SetActive(false);
+        if (!_loadingShown)
+        {
+            ClearChildren(_gridContent);
+            _pageText.text = "...";
+            _categoryText.text = UeiI18n.T("category.all");
+            _selectionText.text = UeiI18n.T("loading.items");
+            _detailPanel.SetActive(false);
+            _loadingShown = true;
+        }
         TickAnimation();
     }
 
@@ -305,11 +327,15 @@ internal sealed class UeiPanel
     {
         _wantsVisible = false;
         ClearNativeTooltip();
+        if (!IsAlive) return;
 
         if (!_root.activeSelf)
         {
-            _animationProgress = 0f;
-            ApplyAnimation();
+            if (_animationProgress > 0f)
+            {
+                _animationProgress = 0f;
+                ApplyAnimation();
+            }
             return;
         }
 
@@ -327,6 +353,7 @@ internal sealed class UeiPanel
 
     public string DescribeVisualState()
     {
+        if (!IsAlive) return "destroyed";
         RectTransform canvasRect = _canvas.GetComponent<RectTransform>();
         return string.Format(
             "rootActive={0} inHierarchy={1} sibling={2} panelPos=({3:0.##},{4:0.##}) panelSize=({5:0.##},{6:0.##}) alpha={7:0.##} anim={8:0.##} canvas={9} canvasScale=({10:0.##},{11:0.##},{12:0.##}) canvasSize=({13:0.##},{14:0.##}) page={15}/{16}",
@@ -387,6 +414,16 @@ internal sealed class UeiPanel
             _root.SetActive(true);
             _dirty = true;
             ApplyAnimation();
+        }
+        BringToFront();
+    }
+
+    private void BringToFront()
+    {
+        Transform parent = _root.transform.parent;
+        if (parent != null && _root.transform.GetSiblingIndex() != parent.childCount - 1)
+        {
+            _root.transform.SetAsLastSibling();
         }
     }
 
@@ -647,6 +684,16 @@ internal sealed class UeiPanel
         AddGearIcon(settings.transform);
         settings.onClick.AddListener(OpenSettings);
         BindTooltip(settings.gameObject, UeiI18n.T("button.settings"), UeiI18n.T("button.settings.desc"));
+
+        Button revive = AddButton(bar.transform, "Revive", string.Empty, SearchTextSize, SearchInputHeight, ReviveButtonWidth);
+        LayoutElement reviveLayout = revive.GetComponent<LayoutElement>();
+        reviveLayout.preferredWidth = ReviveButtonWidth;
+        reviveLayout.minWidth = ReviveButtonWidth;
+        AddReviveIcon(revive.transform);
+        revive.onClick.AddListener(HandleCheatRevive);
+        BindTooltip(revive.gameObject, UeiI18n.T("button.revive"), UeiI18n.T("button.revive.desc"));
+        _reviveButton = revive.gameObject;
+        _reviveButton.SetActive(false);
 
         return input;
     }
@@ -1030,7 +1077,20 @@ internal sealed class UeiPanel
 
     private static bool HasCheatPermission()
     {
-        return HasVanillaCommandAccess() && HasKrokoshaCommandAccess();
+        TogetherNetworkState togetherState = GetTogetherNetworkState(out _, out _, out _);
+        if (togetherState == TogetherNetworkState.Client || togetherState == TogetherNetworkState.Server)
+        {
+            return HasKrokoshaCommandAccess() && HasTogetherCommandAccess();
+        }
+
+        if (togetherState == TogetherNetworkState.Unknown)
+        {
+            return false;
+        }
+
+        return HasVanillaCommandAccess()
+            && HasKrokoshaCommandAccess()
+            && HasTogetherCommandAccess();
     }
 
     private static bool HasVanillaCommandAccess()
@@ -1065,6 +1125,150 @@ internal sealed class UeiPanel
         {
             return false;
         }
+    }
+
+    private static bool HasTogetherCommandAccess()
+    {
+        TogetherNetworkState state = GetTogetherNetworkState(
+            out Type? conType, out _, out Type? multiplayerType);
+        if (state == TogetherNetworkState.NotInstalled || state == TogetherNetworkState.Offline)
+        {
+            return true;
+        }
+
+        if (state != TogetherNetworkState.Client && state != TogetherNetworkState.Server)
+        {
+            return false;
+        }
+
+        if (conType == null)
+        {
+            return false;
+        }
+
+        return UeiCheatPolicy.HasTogetherAccess(state,
+            state == TogetherNetworkState.Client ? TryInvokeStaticBool(conType, "CanExecuteAdminCommands") : null,
+            state == TogetherNetworkState.Server && multiplayerType != null
+                ? TryReadTogetherRuleBool(multiplayerType, "sv_cheats") : null);
+    }
+
+    private static TogetherNetworkState GetTogetherNetworkState(
+        out Type? conType, out Type? netType, out Type? multiplayerType)
+    {
+        conType = FindLoadedType("Together.Con");
+        netType = FindLoadedType("Together.Net");
+        multiplayerType = FindLoadedType("Together.Multiplayer");
+
+        if (conType == null && netType == null && multiplayerType == null)
+        {
+            return TogetherNetworkState.NotInstalled;
+        }
+
+        if (netType == null)
+        {
+            return TogetherNetworkState.Unknown;
+        }
+
+        bool? networkRunning = TryReadStaticBool(netType, "IsRunning");
+        if (networkRunning == false)
+        {
+            return TogetherNetworkState.Offline;
+        }
+
+        if (networkRunning != true)
+        {
+            return TogetherNetworkState.Unknown;
+        }
+
+        if (CuCoreLibHelper.TryGetRunningNetworkState(out TogetherNetworkState publicState))
+        {
+            return publicState;
+        }
+
+        bool? isClient = TryReadStaticBool(netType, "IsClient");
+        if (isClient == true)
+        {
+            return TogetherNetworkState.Client;
+        }
+
+        return isClient == false ? TogetherNetworkState.Server : TogetherNetworkState.Unknown;
+    }
+
+    private static bool? TryReadTogetherRuleBool(Type multiplayerType, string name)
+    {
+        object? rules = TryReadStaticMember(multiplayerType, "rules");
+        return TryReadInstanceBool(rules, name);
+    }
+
+    private static CheatActionResult TryExecuteTogetherAdminCommand(string command)
+    {
+        if (string.IsNullOrWhiteSpace(command))
+        {
+            return CheatActionResult.Failed;
+        }
+
+        TogetherNetworkState state = GetTogetherNetworkState(
+            out Type? conType, out _, out _);
+        if (state != TogetherNetworkState.Client && state != TogetherNetworkState.Server)
+        {
+            return CheatActionResult.Failed;
+        }
+        if (conType == null)
+        {
+            return CheatActionResult.Failed;
+        }
+
+        try
+        {
+            MethodInfo? method = FindStaticStringMethod(conType, "ExecuteCommandAdminNoLog")
+                ?? (state == TogetherNetworkState.Client ? FindStaticStringMethod(conType, "Client_ExecuteAdminCommand") : null);
+            if (method == null)
+            {
+                return CheatActionResult.Failed;
+            }
+
+            method.Invoke(null, new object?[] { command });
+            // The void API provides no completion acknowledgement, even on a host.
+            return CheatActionResult.RequestSent;
+        }
+        catch (Exception ex)
+        {
+            UeiPlugin.LogWarning($"UEI Together command failed: {ex.GetType().Name}: {ex.Message}");
+            return CheatActionResult.Failed;
+        }
+    }
+
+    private static MethodInfo? FindStaticStringMethod(Type type, string name)
+    {
+        foreach (MethodInfo method in type.GetMethods(StaticLookup))
+        {
+            if (!string.Equals(method.Name, name, StringComparison.Ordinal)
+                || method.ReturnType != typeof(void))
+            {
+                continue;
+            }
+
+            ParameterInfo[] parameters = method.GetParameters();
+            if (parameters.Length != 1)
+            {
+                continue;
+            }
+
+            Type parameterType = parameters[0].ParameterType;
+            if (parameterType == typeof(string)
+                || parameterType == typeof(string).MakeByRefType())
+            {
+                return method;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsSafeCommandToken(string value)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+            && value.IndexOfAny(new[] { ' ', '\t', '\r', '\n', '"' }) < 0;
     }
 
     private static bool HasKrokoshaCommandAccess()
@@ -1118,28 +1322,7 @@ internal sealed class UeiPanel
 
     private static Type? FindLoadedType(string fullName)
     {
-        try
-        {
-            Type? direct = Type.GetType(fullName, throwOnError: false);
-            if (direct != null)
-            {
-                return direct;
-            }
-
-            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                Type? type = assembly.GetType(fullName, throwOnError: false);
-                if (type != null)
-                {
-                    return type;
-                }
-            }
-        }
-        catch
-        {
-        }
-
-        return null;
+        return UeiOptionalTypes.Find(fullName);
     }
 
     private static bool? TryInvokeStaticBool(Type type, string methodName)
@@ -1306,12 +1489,49 @@ internal sealed class UeiPanel
         if (!HasCheatPermission())
         {
             UeiPlugin.SetCheatEnabled(false);
+            UpdateCheatActionBar();
             RefreshSettings();
             return;
         }
 
-        UeiPlugin.SetCheatEnabled(!CheatConfigured());
+        bool enableCheatMode = !CheatConfigured();
+        UeiPlugin.SetCheatEnabled(enableCheatMode);
+        _selectedEntry = null;
+        _statusMessage = string.Empty;
+        _recipePage = 0;
+        _detailDirty = true;
+        _dirty = true;
+        RefreshDetail();
+        RefreshGrid();
+        UpdateCheatActionBar();
         RefreshSettings();
+    }
+
+    private void UpdateCheatActionBar()
+    {
+        if (_reviveButton == null)
+        {
+            return;
+        }
+
+        bool visible = CheatEnabled();
+        if (_reviveButton.activeSelf != visible)
+        {
+            _reviveButton.SetActive(visible);
+        }
+    }
+
+    private void HandleCheatRevive()
+    {
+        CheatActionResult result = TryCheatRevive();
+        string status = result switch
+        {
+            CheatActionResult.Completed => UeiI18n.T("status.reviveDone"),
+            CheatActionResult.RequestSent => UeiI18n.T("status.reviveRequestSent"),
+            _ => UeiI18n.T("status.reviveFailed"),
+        };
+        _statusMessage = status;
+        UpdateSelectionText(FilterEntries().Count());
     }
 
     private void RefreshGrid()
@@ -1423,11 +1643,20 @@ internal sealed class UeiPanel
             return;
         }
 
-        string status = TryCheatGiveItem(entry)
-            ? UeiI18n.T("status.cheatSpawned")
-            : (IsLegalCheatItem(entry) ? UeiI18n.T("status.cheatFailed") : UeiI18n.T("status.cheatIllegal"));
-        SelectEntry(entry, UeiRecipeRelation.ProducedBy, linkOriginalRecipe: false);
-        _statusMessage = status;
+        CheatActionResult result = TryCheatGiveItem(entry);
+        string status = result switch
+        {
+            CheatActionResult.Completed => UeiI18n.T("status.cheatSpawned"),
+            CheatActionResult.RequestSent => UeiI18n.T("status.cheatRequestSent"),
+            CheatActionResult.HostRequired => UeiI18n.T("status.cheatHostRequired"),
+            _ => (IsLegalCheatItem(entry) ? UeiI18n.T("status.cheatFailed") : UeiI18n.T("status.cheatIllegal")),
+        };
+        _selectedEntry = null;
+        _detailMode = UeiRecipeRelation.ProducedBy;
+        _recipePage = 0;
+        _statusMessage = result == CheatActionResult.HostRequired ? status : entry.DisplayName + " - " + status;
+        _detailDirty = true;
+        _dirty = true;
         RefreshGrid();
         RefreshDetail();
     }
@@ -1473,6 +1702,13 @@ internal sealed class UeiPanel
 
     private static bool IsLegalCheatItem(UeiEntry entry)
     {
+        return TryGetLegalCheatItem(entry, out _, out _);
+    }
+
+    private static bool TryGetLegalCheatItem(UeiEntry entry, out bool customItem, out bool resourceItem)
+    {
+        customItem = false;
+        resourceItem = false;
         if (entry.Kind != UeiEntryKind.Item || string.IsNullOrWhiteSpace(entry.Id))
         {
             return false;
@@ -1485,13 +1721,15 @@ internal sealed class UeiPanel
 
         try
         {
-            if (IsRshLibCustomItem(entry.Id))
+            customItem = IsCustomModItem(entry.Id);
+            if (customItem)
             {
                 return true;
             }
 
             GameObject prefab = Resources.Load<GameObject>(entry.Id);
-            return prefab != null && prefab.GetComponent<Item>() != null;
+            resourceItem = prefab != null && prefab.GetComponent<Item>() != null;
+            return resourceItem;
         }
         catch
         {
@@ -1499,16 +1737,41 @@ internal sealed class UeiPanel
         }
     }
 
-    private static bool IsRshLibCustomItem(string itemId)
+    private static bool IsCustomModItem(string itemId)
     {
-        return RshLibHelper.IsCustomItem(itemId);
+        return CuCoreLibHelper.IsCustomItem(itemId)
+            || RshLibHelper.IsCustomItem(itemId)
+            || SexModHelper.IsRegistered(itemId);
     }
 
-    private static bool TryCheatGiveItem(UeiEntry entry)
+    private static CheatActionResult TryCheatGiveItem(UeiEntry entry)
     {
-        if (!HasCheatPermission() || !IsLegalCheatItem(entry))
+        if (!HasCheatPermission() || !TryGetLegalCheatItem(entry, out bool customItem, out bool resourceItem))
         {
-            return false;
+            return CheatActionResult.Failed;
+        }
+
+        TogetherNetworkState togetherState = GetTogetherNetworkState(
+            out _, out _, out _);
+        UeiGiveRoute route = UeiCheatPolicy.GiveRoute(togetherState, customItem, resourceItem);
+        if (route == UeiGiveRoute.HostRequired)
+        {
+            return CheatActionResult.HostRequired;
+        }
+        if (route == UeiGiveRoute.Unavailable)
+        {
+            return CheatActionResult.Failed;
+        }
+        if (route == UeiGiveRoute.ServerCommand)
+        {
+            if (!IsSafeCommandToken(entry.Id))
+            {
+                return CheatActionResult.Failed;
+            }
+
+            // Together's give command is authoritative on the server. @m resolves to
+            // the command caller on both a host and an authenticated client.
+            return TryExecuteTogetherAdminCommand("give @m " + entry.Id);
         }
 
         try
@@ -1516,23 +1779,31 @@ internal sealed class UeiPanel
             Body? body = PlayerCamera.main?.body;
             if (body == null)
             {
-                return false;
+                return CheatActionResult.Failed;
             }
 
             Vector3 pos = body.transform.position + new Vector3(0f, 0.4f, 0f);
             pos.z = 0f;
 
-            GameObject inst = Utils.Create(entry.Id, pos, 0f);
+            // Prefer CUCore's public factory for items it owns. In particular, do
+            // not rely on the implementation details of its Utils.Create patch.
+            GameObject? inst = CuCoreLibHelper.IsCustomItem(entry.Id)
+                ? CuCoreLibHelper.CreateInstance(entry.Id, pos, 0f)
+                : Utils.Create(entry.Id, pos, 0f);
             if (inst == null)
             {
-                return false;
+                inst = SexModHelper.CreateInstance(entry.Id, pos, 0f);
+            }
+            if (inst == null)
+            {
+                return CheatActionResult.Failed;
             }
 
             Item? item = inst.GetComponent<Item>();
             if (item == null)
             {
                 UnityEngine.Object.Destroy(inst);
-                return false;
+                return CheatActionResult.Failed;
             }
 
             try { item.condition = 1f; } catch { }
@@ -1547,11 +1818,151 @@ internal sealed class UeiPanel
             catch { }
 
             body.AutoPickUpItem(item);
-            return true;
+            return CheatActionResult.Completed;
         }
         catch (Exception ex)
         {
             UeiPlugin.LogWarning($"UEI cheat give failed for {entry.Id}: {ex.Message}");
+            return CheatActionResult.Failed;
+        }
+    }
+
+    private static CheatActionResult TryCheatRevive()
+    {
+        if (!CheatEnabled())
+        {
+            return CheatActionResult.Failed;
+        }
+
+        TogetherNetworkState togetherState = GetTogetherNetworkState(
+            out _, out _, out _);
+        if (togetherState == TogetherNetworkState.Client
+            || togetherState == TogetherNetworkState.Server)
+        {
+            // A local heal on a Together client is not authoritative and can be
+            // overwritten by the next health snapshot from the server.
+            return TryExecuteTogetherAdminCommand("heal @m");
+        }
+
+        if (TryRunConsoleCommand("heal"))
+        {
+            return CheatActionResult.Completed;
+        }
+
+        return TryRestoreBodyStateFallback()
+            ? CheatActionResult.Completed
+            : CheatActionResult.Failed;
+    }
+
+    private static bool TryRunConsoleCommand(string command)
+    {
+        try
+        {
+            ConsoleScript? console = ConsoleScript.instance;
+            if (console == null || string.IsNullOrWhiteSpace(command))
+            {
+                return false;
+            }
+
+            MethodInfo? method = typeof(ConsoleScript).GetMethod("TryExecuteCommand", InstanceLookup);
+            if (method == null)
+            {
+                return false;
+            }
+
+            method.Invoke(console, new object[] { new[] { command }, false });
+            return true;
+        }
+        catch (Exception ex)
+        {
+            UeiPlugin.LogWarning($"UEI cheat command '{command}' failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    private static bool TryRestoreBodyStateFallback()
+    {
+        try
+        {
+            Body? body = PlayerCamera.main?.body;
+            if (body == null)
+            {
+                return false;
+            }
+
+            if (body.limbs != null)
+            {
+                foreach (Limb limb in body.limbs)
+                {
+                    if (limb == null)
+                    {
+                        continue;
+                    }
+
+                    limb.muscleHealth = 100f;
+                    limb.skinHealth = 100f;
+                    limb.boneHealTimer = 100f;
+                    limb.dislocationTimer = 100f;
+                    limb.infectionAmount = 0f;
+                    limb.bleedAmount = 0f;
+                    limb.pain = 0f;
+                    limb.shrapnel = 0;
+                    limb.infected = false;
+                }
+            }
+
+            body.brainHealth = 100f;
+            body.bloodVolume = 100f;
+            body.bloodOxygen = 100f;
+            body.bloodPressure = 120f;
+            body.heartRate = 80f;
+            body.bloodVesselSize = 100f;
+            body.bloodViscosity = 0f;
+            body.respiratoryRate = 70f;
+            body.strokeAmount = 0f;
+            body.hasPulmonaryEmbolism = false;
+            body.fibrillationProgress = 0f;
+            body.hunger = 100f;
+            body.thirst = 100f;
+            body.septicShock = 0f;
+            body.temperature = 37f;
+            body.sicknessAmount = 0f;
+            body.consciousness = 100f;
+            body.stamina = 100f;
+            body.energy = 100f;
+            body.happiness = 0f;
+            body.weightOffset = 0f;
+            body.radiationSickness = 0f;
+            body.disfigured = false;
+            body.eyeGone = false;
+            body.internalBleeding = 0f;
+            body.hemothorax = 0f;
+            body.traumaAmount = 0f;
+            body.dirtyness = 0f;
+            body.wetness = 0f;
+            body.badSleepAmount = 0f;
+            body.hearingLoss = 0f;
+            body.antidepressantHappiness = 0f;
+            body.opiateHappiness = 0f;
+            body.antibioticImmunityTime = 0f;
+            body.brainGrowSickness = 0f;
+            body.triedRollingLastStand = false;
+            body.succesfullyRolledLastStand = false;
+            body.lastStandTime = 0f;
+            body.adrenaline = 0f;
+            body.curAdrenaline = 0f;
+            body.venomCurrent = 0f;
+            body.venomTotal = 0f;
+            body.breathing = true;
+
+            try { body.Stand(force: true); } catch { }
+            try { PlayerCamera.main?.OnBecameConscious(); } catch { }
+            try { PlayerCamera.main?.DoAlert(UeiI18n.T("status.reviveDone"), important: false); } catch { }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            UeiPlugin.LogWarning($"UEI revive fallback failed: {ex.Message}");
             return false;
         }
     }
@@ -2482,6 +2893,10 @@ internal sealed class UeiPanel
             string suffix = string.IsNullOrWhiteSpace(_statusMessage) ? string.Empty : " - " + _statusMessage;
             _selectionText.text = _selectedEntry.DisplayName + suffix;
         }
+        else if (!string.IsNullOrWhiteSpace(_statusMessage))
+        {
+            _selectionText.text = _statusMessage;
+        }
         else if (filteredCount == 0)
         {
             _selectionText.text = UeiI18n.T("selection.noResults");
@@ -2737,6 +3152,29 @@ internal sealed class UeiPanel
         rt.sizeDelta = size;
     }
 
+    private void AddReviveIcon(Transform parent)
+    {
+        GameObject holder = NewUiObject("ReviveIcon", parent);
+        RectTransform rt = holder.GetComponent<RectTransform>();
+        rt.SetStretch();
+
+        AddIconPixel(holder.transform, "Cross.Vertical", new Vector2(4f, 14f), Vector2.zero, TextColor);
+        AddIconPixel(holder.transform, "Cross.Horizontal", new Vector2(14f, 4f), Vector2.zero, TextColor);
+        AddIconPixel(holder.transform, "Pulse.Left", new Vector2(3f, 3f), new Vector2(-7f, -5f), PixelBorderColor);
+        AddIconPixel(holder.transform, "Pulse.Right", new Vector2(3f, 3f), new Vector2(7f, 5f), PixelBorderColor);
+    }
+
+    private void AddIconPixel(Transform parent, string name, Vector2 size, Vector2 position, Color color)
+    {
+        GameObject go = AddImage(parent, name, color, raycast: false);
+        RectTransform rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = position;
+        rt.sizeDelta = size;
+    }
+
     private Image AddIcon(Transform parent, string name, Sprite? sprite, Color color, float maxSize)
     {
         GameObject go = NewUiObject(name, parent);
@@ -2840,7 +3278,7 @@ internal sealed class UeiPanel
 
     private static bool IsPointerInsideScreenBounds(RectTransform rect, Camera? uiCamera)
     {
-        Vector3[] corners = new Vector3[4];
+        Vector3[] corners = PointerCornerBuffer;
         rect.GetWorldCorners(corners);
         Vector2 min = new(float.MaxValue, float.MaxValue);
         Vector2 max = new(float.MinValue, float.MinValue);

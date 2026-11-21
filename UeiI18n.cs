@@ -66,11 +66,18 @@ internal static class UeiI18n
         ["status.unpinRecipe"] = "Unpinned",
         ["status.pinFailed"] = "Pin failed",
         ["status.cheatSpawned"] = "Gave 1",
+        ["status.cheatRequestSent"] = "Give requested",
+        ["status.cheatHostRequired"] = "Mod item: ask the host to spawn it",
         ["status.cheatIllegal"] = "Not a legal item",
         ["status.cheatFailed"] = "Give failed",
+        ["status.reviveDone"] = "Revived",
+        ["status.reviveRequestSent"] = "Revive requested",
+        ["status.reviveFailed"] = "Revive failed",
         ["button.settings.short"] = "S",
         ["button.settings"] = "Settings",
         ["button.settings.desc"] = "Open UEI settings",
+        ["button.revive"] = "Revive",
+        ["button.revive.desc"] = "Fully heal and revive the player character",
         ["button.closeDetail"] = "Close",
         ["button.closeDetail.desc"] = "Close UEI detail panel",
         ["button.jumpRecipe"] = "Jump",
@@ -184,11 +191,18 @@ internal static class UeiI18n
         ["status.unpinRecipe"] = "已取消收藏",
         ["status.pinFailed"] = "收藏失败",
         ["status.cheatSpawned"] = "已发放 1 个",
+        ["status.cheatRequestSent"] = "已请求服务器发放",
+        ["status.cheatHostRequired"] = "模组物品需由房主生成",
         ["status.cheatIllegal"] = "不是合法物品",
         ["status.cheatFailed"] = "发放失败",
+        ["status.reviveDone"] = "已复活",
+        ["status.reviveRequestSent"] = "已请求服务器复活",
+        ["status.reviveFailed"] = "复活失败",
         ["button.settings.short"] = "设",
         ["button.settings"] = "设置",
         ["button.settings.desc"] = "打开 UEI 设置",
+        ["button.revive"] = "一键复活",
+        ["button.revive.desc"] = "回满并复活玩家角色",
         ["button.closeDetail"] = "关闭",
         ["button.closeDetail.desc"] = "关闭 UEI 详情面板",
         ["button.jumpRecipe"] = "跳转",
@@ -243,7 +257,7 @@ internal static class UeiI18n
     public static string T(string key)
     {
         Dictionary<string, string> table = IsChinese() ? Zh : En;
-        if (table.TryGetValue(key, out string value))
+        if (table.TryGetValue(key, out string? value))
         {
             return value;
         }
@@ -264,7 +278,9 @@ internal static class UeiI18n
         }
 
         string value = SafeString(() => Locale.GetItem(localeKey), string.Empty);
-        return IsResolvedLocaleValue(value, localeKey) ? value : fallback;
+        if (IsResolvedLocaleValue(value, localeKey)) return value;
+        string custom = CuCoreLibHelper.GetItemText(localeKey);
+        return IsResolvedLocaleValue(custom, localeKey) ? custom : fallback;
     }
 
     public static string OtherText(string localeKey, string fallback)
@@ -276,6 +292,12 @@ internal static class UeiI18n
 
         string value = SafeString(() => Locale.GetOther(localeKey), string.Empty);
         return IsResolvedLocaleValue(value, localeKey) ? value : fallback;
+    }
+
+    public static string LiquidText(string localeKey, string fallback)
+    {
+        // CUCore maps its liquid locale category into the game's other dictionary.
+        return OtherText(localeKey, fallback);
     }
 
     public static string CategoryLabel(string categoryKey)
@@ -323,7 +345,7 @@ internal static class UeiI18n
 
     public static string RecipeCategoryLabel(object category)
     {
-        string raw = SafeString(() => category.ToString(), string.Empty);
+        string raw = SafeString(() => category.ToString() ?? string.Empty, string.Empty);
         if (string.IsNullOrWhiteSpace(raw))
         {
             return T("category.other");
@@ -438,12 +460,14 @@ internal static class UeiI18n
     private static bool TryTableText(string key, out string value)
     {
         Dictionary<string, string> table = IsChinese() ? Zh : En;
-        if (table.TryGetValue(key, out value))
+        if (table.TryGetValue(key, out string? found) || En.TryGetValue(key, out found))
         {
+            value = found;
             return true;
         }
 
-        return En.TryGetValue(key, out value);
+        value = string.Empty;
+        return false;
     }
 
     private static bool IsResolvedLocaleValue(string value, string key)
