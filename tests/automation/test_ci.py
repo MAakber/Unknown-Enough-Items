@@ -28,6 +28,8 @@ class AutomationChecks(unittest.TestCase):
             destination = self.root / name
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(REPO / name, destination)
+        (self.root / "packaging/RELEASE-NOTES.md").write_text(
+            "<!-- version: 1.2.4 -->\n\n## Changes\n\nUEI 1.2.4 fixture release notes.\n", encoding="utf-8")
         (self.root / ci.REFERENCE_DIR).mkdir(parents=True)
         self.manifest = {"format": 1, "files": {name: {"size": 2, "sha256": ci.digest(b"MZ")}
                                                      for name in ci.REFERENCES}}
@@ -73,6 +75,27 @@ class AutomationChecks(unittest.TestCase):
         self.set_version("1.2.5")
         with self.assertRaises(ValueError):
             ci.read_version(self.root)
+
+    def test_reject_stale_release_notes_version(self):
+        self.set_version("1.2.5", "1.2.5")
+        with self.assertRaises(ValueError):
+            ci.read_release_notes(self.root)
+
+    def test_reject_empty_release_notes(self):
+        (self.root / "packaging/RELEASE-NOTES.md").write_text("<!-- version: 1.2.4 -->\n", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            ci.read_release_notes(self.root)
+
+    def test_version_marker_is_not_published(self):
+        notes = ci.read_release_notes(self.root)
+        self.assertNotIn("<!-- version:", notes)
+        self.assertIn("1.2.4", notes)
+
+    def test_reject_changed_release_notes_artifact(self):
+        self.make_package()
+        (self.output / "release-notes.md").write_text("wrong release notes", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            ci.verify_package(self.output, self.root)
 
     def test_reject_tag_mismatch(self):
         for tag in ("v1.2.5", "v1.2.4-beta", "V1.2.4", "1.2.4", "v1.2.4; echo injected"):

@@ -53,6 +53,15 @@ def read_version(root: Path = ROOT, tag: str | None = None) -> str:
     return version
 
 
+def read_release_notes(root: Path = ROOT) -> str:
+    version = read_version(root)
+    raw = (root / "packaging/RELEASE-NOTES.md").read_text(encoding="utf-8-sig")
+    header, _, body = raw.partition("\n")
+    if header != f"<!-- version: {version} -->" or not body.strip():
+        raise ValueError(f"Write release notes for {version} and update the version marker.")
+    return body.strip() + "\n"
+
+
 def reference_manifest(root: Path = ROOT) -> dict:
     manifest = json.loads((root / REFERENCE_DIR / "manifest.json").read_text(encoding="utf-8"))
     if manifest.get("format") != 1 or set(manifest.get("files", {})) != set(REFERENCES):
@@ -188,7 +197,7 @@ def package(dll: Path, output: Path, root: Path = ROOT) -> None:
     names = [f"UEI-{version}.zip", "UEI.dll", "build-info.json"]
     (output / "SHA256SUMS.txt").write_text("".join(
         digest((output / name).read_bytes()) + "  " + name + "\n" for name in names), encoding="utf-8")
-    shutil.copyfile(root / "packaging/RELEASE-NOTES.md", output / "release-notes.md")
+    (output / "release-notes.md").write_text(read_release_notes(root), encoding="utf-8")
     verify_package(output, root)
     print(f"Created and verified UEI {version} release assets.")
 
@@ -198,6 +207,8 @@ def verify_package(output: Path, root: Path = ROOT) -> None:
     names = {f"UEI-{version}.zip", "UEI.dll", "build-info.json"}
     if {p.name for p in output.iterdir()} != names | {"SHA256SUMS.txt", "release-notes.md"}:
         raise ValueError("Release directory contains missing or unexpected files.")
+    if (output / "release-notes.md").read_text(encoding="utf-8") != read_release_notes(root):
+        raise ValueError("Release notes do not match the checked-out source.")
     checksums = {}
     for line in (output / "SHA256SUMS.txt").read_text(encoding="utf-8").splitlines():
         checksum, name = line.split("  ", 1)
@@ -234,7 +245,7 @@ def publish(output: Path, tag: str, root: Path = ROOT) -> None:
     # Stage privately first. A failed create/upload never reaches the publish step.
     # No --clobber: an existing release is never silently replaced.
     run(["gh", "release", "create", tag, "--repo", REPOSITORY, "--draft",
-         "--verify-tag", "--title", f"UEI {version}", "--generate-notes",
+         "--verify-tag", "--title", f"UEI {version}",
          "--notes-file", str(output / "release-notes.md"), *map(str, assets)], cwd=root)
     run(["gh", "release", "edit", tag, "--repo", REPOSITORY, "--draft=false"], cwd=root)
 
@@ -263,6 +274,7 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "version":
         version = read_version(tag=args.tag)
+        read_release_notes()
         print(version)
         if os.environ.get("GITHUB_OUTPUT"):
             with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
