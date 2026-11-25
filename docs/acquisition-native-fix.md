@@ -57,7 +57,7 @@ delivery and optional-mod changes. No commit or publication is requested.
 ## Verified output and installation
 
 Installed DLL:
-`C:\Users\10178\AppData\Roaming\com.kesomannen.gale\casualties-unknown\profiles\UEI-Test\BepInEx\plugins\UEI\UEI\UEI.dll`.
+`%APPDATA%\com.kesomannen.gale\casualties-unknown\profiles\UEI-Test\BepInEx\plugins\UEI\UEI\UEI.dll`.
 
 Version: `1.2.7`. SHA-256:
 `ACA81A789BD694EC28B30DD85E6DFDB8B11340205956FA9B77420A00178A423A`.
@@ -79,12 +79,12 @@ Run from the source repository, using the checked full-game reference copies:
 ```powershell
 $taskRoot = Join-Path $PWD 'artifacts\acquisition-native-2026-11-22'
 $taskReferences = Join-Path $PWD 'artifacts\input-performance-2026-11-22\references'
-$taskGameAssembly = 'D:\SteamLibrary\steamapps\common\Casualties Unknown\CasualtiesUnknown_Data\Managed\Assembly-CSharp.dll'
-$taskProfile = 'C:\Users\10178\AppData\Roaming\com.kesomannen.gale\casualties-unknown\profiles\UEI-Test'
+$taskGameAssembly = '<游戏目录>\CasualtiesUnknown_Data\Managed\Assembly-CSharp.dll'
+$taskProfile = Join-Path $env:APPDATA 'com.kesomannen.gale\casualties-unknown\profiles\UEI-Test'
 $taskTogether = Join-Path $taskProfile 'BepInEx\plugins\CasualtiesTogether-CasualtiesTogether\CasualtiesTogether-CasualtiesTogether'
 
 dotnet run --project tests/UEI.RegressionTests.csproj -c Release -- "$PWD" `
-  'D:\SteamLibrary\steamapps\common\Casualties Unknown\CasualtiesUnknown_Data'
+  '<游戏目录>\CasualtiesUnknown_Data'
 python -m unittest discover -s tests/automation -p 'test_*.py'
 python scripts/ci.py version
 dotnet build UEI.csproj -c Release `
@@ -169,7 +169,7 @@ work wholesale. Build into a separate artifact directory using the full-game
 references, never the legacy `build.ps1` Demo path.
 
 Installed DLL:
-`C:\Users\10178\AppData\Roaming\com.kesomannen.gale\casualties-unknown\profiles\UEI-Test\BepInEx\plugins\UEI\UEI\UEI.dll`.
+`%APPDATA%\com.kesomannen.gale\casualties-unknown\profiles\UEI-Test\BepInEx\plugins\UEI\UEI\UEI.dll`.
 
 To revert the installed build, close the game and copy
 `artifacts/acquisition-native-2026-11-22/baseline/Gale-UEI-1.2.6-1A0458BC.dll.bak`

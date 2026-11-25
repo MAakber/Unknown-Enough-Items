@@ -47,7 +47,7 @@ Baseline regression harness: 1,155 assertions passed.
 ## Installed build and recovery
 
 Installed DLL:
-`C:\Users\10178\AppData\Roaming\com.kesomannen.gale\casualties-unknown\profiles\UEI-Test\BepInEx\plugins\UEI\UEI\UEI.dll`
+`%APPDATA%\com.kesomannen.gale\casualties-unknown\profiles\UEI-Test\BepInEx\plugins\UEI\UEI\UEI.dll`
 
 Version: `1.2.6`. SHA-256:
 `1A0458BC8DC33289E77574E469A9D0A19C401C1CE3EC9E23458659F991A62F04`.
@@ -112,8 +112,8 @@ dotnet build UEI.csproj -c Release `
   "-p:MSBuildProjectExtensionsPath=$taskRoot\obj-final\"
 dotnet run --project "$taskRoot\patch-check\PatchCheck.csproj" -c Release -- `
   "$taskRoot\final-stage\UEI.build.dll" `
-  'D:\SteamLibrary\steamapps\common\Casualties Unknown\CasualtiesUnknown_Data\Managed\Assembly-CSharp.dll' `
-  'C:\Users\10178\AppData\Roaming\com.kesomannen.gale\casualties-unknown\profiles\UEI-Test\BepInEx\core'
+  '<游戏目录>\CasualtiesUnknown_Data\Managed\Assembly-CSharp.dll' `
+  (Join-Path $env:APPDATA 'com.kesomannen.gale\casualties-unknown\profiles\UEI-Test\BepInEx\core')
 ```
 
 Run `tests/Verify-ApiContracts.ps1` as described in `tests/README.md`, passing

@@ -37,7 +37,7 @@
 恢复时只撤销本任务的改动；不要覆盖此前未提交的输入、获取信息和性能修复。
 
 安装位置：
-`C:\Users\10178\AppData\Roaming\com.kesomannen.gale\casualties-unknown\profiles\UEI-Test\BepInEx\plugins\UEI\UEI\UEI.dll`。
+`%APPDATA%\com.kesomannen.gale\casualties-unknown\profiles\UEI-Test\BepInEx\plugins\UEI\UEI\UEI.dll`。
 
 1.2.8 构建与安装 SHA-256：
 `0B4E3E580AF0B646F5471E91C1B5DEA8D134AF23C930F03772287BF017226A62`。
