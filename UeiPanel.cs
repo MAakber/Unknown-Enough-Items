@@ -9,12 +9,37 @@ using UnityEngine.UI;
 
 internal sealed class UeiPanel
 {
-    private enum CheatActionResult
+    private enum SourceSection { Acquisition, Crafting, Supplement }
+
+    internal enum CheatActionResult
     {
         Failed,
         Completed,
+        SpawnedNearby,
         RequestSent,
         HostRequired,
+    }
+
+    private sealed class EntryCell
+    {
+        internal readonly Image Background;
+        internal readonly Button Button;
+        internal readonly Image Icon;
+        internal readonly UeiEntryClickHandler Click;
+        internal readonly UITooltip Tooltip;
+        internal readonly UeiTooltipRelay Relay;
+        internal bool Selected;
+
+        internal EntryCell(Image background, Button button, Image icon,
+            UeiEntryClickHandler click, UITooltip tooltip, UeiTooltipRelay relay)
+        {
+            Background = background;
+            Button = button;
+            Icon = icon;
+            Click = click;
+            Tooltip = tooltip;
+            Relay = relay;
+        }
     }
 
     private const int Columns = 6;
@@ -33,14 +58,21 @@ internal sealed class UeiPanel
     private const float SearchVerticalPadding = 2f;
     private const float SettingsButtonWidth = 22f;
     private const float ReviveButtonWidth = 22f;
-    private const int RecipePageSize = 2;
     private const float DetailPanelWidth = 310f;
     private const float DetailGap = 12f;
     private const float DetailHeaderHeight = 22f;
+    private const float DetailSummaryHeight = 44f;
+    private const float AcquisitionNoticeHeight = 30f;
     private const float RecipeCardHeight = 132f;
     private const float RecipeIconSize = 32f;
     private const float RecipeIngredientSize = 26f;
     private const float DetailActionButtonSize = 22f;
+    private const float AcquisitionPadding = 6f;
+    private const float AcquisitionTitleHeight = 14f;
+    private const float AcquisitionTextGap = 3f;
+    private const float AcquisitionMaxTextHeight = 64f;
+    private const float AcquisitionNotesTextHeight = 220f;
+    private const float AcquisitionScrollbarWidth = 6f;
     private const float EnterAnimationSeconds = 0.16f;
     private const float ExitAnimationSeconds = 0.12f;
     private const float WheelPageThreshold = 0.1f;
@@ -75,6 +107,8 @@ internal sealed class UeiPanel
     private readonly RectTransform _settingsContent;
     private readonly GridLayoutGroup _grid;
     private readonly RectTransform _gridContent;
+    private readonly List<EntryCell> _gridCells = new(PageSize);
+    private readonly UeiCatalogView _catalogView = new();
     private readonly TMP_InputField _searchInput;
     private GameObject _reviveButton = null!;
     private TextMeshProUGUI _pageText = null!;
@@ -82,6 +116,7 @@ internal sealed class UeiPanel
     private TextMeshProUGUI _detailModeText = null!;
     private TextMeshProUGUI _detailTitleText = null!;
     private TextMeshProUGUI _recipePageText = null!;
+    private ScrollRect? _acquisitionScroll;
     private TextMeshProUGUI _settingsTitleText = null!;
     private TextMeshProUGUI _settingsButtonText = null!;
     private TextMeshProUGUI _scaleValueText = null!;
@@ -92,14 +127,24 @@ internal sealed class UeiPanel
     private const float SelectionHeight = 16f;
 
     private int _catalogRevision = -1;
+    private int _acquisitionRevision = -1;
+    private int _favoritesRevision = -1;
     private int _lastScreenWidth = -1;
     private int _lastScreenHeight = -1;
     private string _lastPanelPosition = string.Empty;
     private float _lastPanelScale = -1f;
+    private float _lastCanvasScale = -1f;
     private int _page;
     private int _lastPageCount = 1;
     private int _categoryIndex;
     private int _recipePage;
+    private int _acquisitionPage;
+    private int _detailPageSize = 2;
+    private int _recipeRowsChangeAnchor = -1;
+    private float _detailCardScale = 1f;
+    private SourceSection _sourceSection;
+    private string _acquisitionPageAnchor = string.Empty;
+    private bool _restoreAcquisitionPageAnchor;
     private int _lastRecipePageCount = 1;
     private bool _dirty = true;
     private bool _detailDirty = true;
@@ -107,6 +152,10 @@ internal sealed class UeiPanel
     private bool _settingsOpen;
     private bool _wantsVisible;
     private float _animationProgress;
+    private bool _animationDirty = true;
+    private float _lastAppliedAnimationProgress = -1f;
+    private bool _lastAppliedWantsVisible;
+    private bool _lastAppliedSettingsOpen;
     private int _lastAnimationFrame = -1;
     private int _lastPagingInputFrame = -1;
     private int _lastWheelSampleFrame = -1;
@@ -117,6 +166,9 @@ internal sealed class UeiPanel
     private string _statusMessage = string.Empty;
     private UeiRecipeRelation _detailMode = UeiRecipeRelation.ProducedBy;
     private UeiEntry? _selectedEntry;
+    private GameObject? _placementPreview;
+    private RectTransform? _placementPreviewRect;
+    private TextMeshProUGUI? _placementHint;
     private float _pendingPanelScale;
 
     public UeiPanel(Canvas canvas)
@@ -177,7 +229,7 @@ internal sealed class UeiPanel
 
         VerticalLayoutGroup detailLayout = _detailPanel.AddComponent<VerticalLayoutGroup>();
         detailLayout.padding = new RectOffset(0, 0, 0, 0);
-        detailLayout.spacing = 6f;
+        detailLayout.spacing = PanelSpacing;
         detailLayout.childAlignment = TextAnchor.UpperLeft;
         detailLayout.childControlWidth = true;
         detailLayout.childControlHeight = true;
@@ -188,9 +240,9 @@ internal sealed class UeiPanel
         _recipeContent = NewUiObject("RecipeContent", _detailPanel.transform).GetComponent<RectTransform>();
         LayoutElement recipeLayout = _recipeContent.gameObject.AddComponent<LayoutElement>();
         recipeLayout.flexibleHeight = 1f;
-        recipeLayout.minHeight = 250f;
+        recipeLayout.minHeight = 0f;
         VerticalLayoutGroup recipeGroup = _recipeContent.gameObject.AddComponent<VerticalLayoutGroup>();
-        recipeGroup.spacing = 6f;
+        recipeGroup.spacing = PanelSpacing;
         recipeGroup.childAlignment = TextAnchor.UpperLeft;
         recipeGroup.childControlWidth = true;
         recipeGroup.childControlHeight = true;
@@ -238,6 +290,19 @@ internal sealed class UeiPanel
 
     public bool IsTextInputFocused => IsAlive && _root.activeInHierarchy && _animationProgress > 0.98f && _searchInput.isFocused;
 
+    public void ReleaseTextInputFocus()
+    {
+        if (!IsAlive || _searchInput == null) return;
+        _searchInput.DeactivateInputField();
+        EventSystem eventSystem = EventSystem.current;
+        if (eventSystem == null) return;
+        GameObject selected = eventSystem.currentSelectedGameObject;
+        if (selected != null && (selected == _searchInput.gameObject || selected.transform.IsChildOf(_searchInput.transform)))
+        {
+            eventSystem.SetSelectedGameObject(null);
+        }
+    }
+
     public bool IsPointerOverPanel
     {
         get
@@ -262,8 +327,7 @@ internal sealed class UeiPanel
                 _lastPointerOverPanel = RectTransformUtility.RectangleContainsScreenPoint(_panelRect, Input.mousePosition, uiCamera)
                     || (_detailPanel.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(_detailRect, Input.mousePosition, uiCamera))
                     || (_settingsPanel.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(_settingsRect, Input.mousePosition, uiCamera))
-                    || IsPointerInsidePanelScreenBounds(uiCamera)
-                    || IsPointerOverPanelGraphic();
+                    || IsPointerInsidePanelScreenBounds(uiCamera);
                 return _lastPointerOverPanel;
             }
             catch
@@ -289,6 +353,25 @@ internal sealed class UeiPanel
         if (_catalogRevision != UeiCatalog.Revision)
         {
             _catalogRevision = UeiCatalog.Revision;
+            if (_selectedEntry != null)
+            {
+                UeiCatalog.TryGetEntry(_selectedEntry.Kind, _selectedEntry.Id, out UeiEntry? currentEntry);
+                _selectedEntry = currentEntry;
+            }
+            _dirty = true;
+            _detailDirty = true;
+        }
+
+        if (_acquisitionRevision != UeiCatalog.AcquisitionRevision)
+        {
+            _acquisitionRevision = UeiCatalog.AcquisitionRevision;
+            _restoreAcquisitionPageAnchor = true;
+            _detailDirty = true;
+        }
+
+        if (_favoritesRevision != UeiFavorites.Revision)
+        {
+            _favoritesRevision = UeiFavorites.Revision;
             _dirty = true;
             _detailDirty = true;
         }
@@ -313,11 +396,12 @@ internal sealed class UeiPanel
         UpdatePanelSize(camera);
         if (!_loadingShown)
         {
-            ClearChildren(_gridContent);
+            foreach (EntryCell cell in _gridCells) BindEntryCell(cell, null);
             _pageText.text = "...";
             _categoryText.text = UeiI18n.T("category.all");
             _selectionText.text = UeiI18n.T("loading.items");
             _detailPanel.SetActive(false);
+            _lastPointerCheckFrame = -1;
             _loadingShown = true;
         }
         TickAnimation();
@@ -331,20 +415,68 @@ internal sealed class UeiPanel
 
         if (!_root.activeSelf)
         {
-            if (_animationProgress > 0f)
-            {
-                _animationProgress = 0f;
-                ApplyAnimation();
-            }
+            _animationProgress = 0f;
+            ApplyAnimation();
             return;
         }
 
         TickAnimation();
     }
 
+    internal void SetPlacementStatus(string message)
+    {
+        _statusMessage = message;
+        _dirty = _detailDirty = true;
+    }
+
+    internal void HidePlacementPreview()
+    {
+        if (_placementPreview != null) _placementPreview.SetActive(false);
+    }
+
+    internal void ShowPlacementPreview(UeiEntry entry, bool canPlace, bool hasAppearance)
+    {
+        if (!IsAlive) return;
+        if (_placementPreview == null)
+        {
+            _placementPreview = NewUiObject("UEI.PlacementPreview", _canvas.transform);
+            _placementPreviewRect = _placementPreview.GetComponent<RectTransform>();
+            _placementPreviewRect.anchorMin = _placementPreviewRect.anchorMax = _canvas.GetComponent<RectTransform>().pivot;
+            _placementPreviewRect.pivot = new Vector2(0.5f, 0.5f);
+            _placementPreviewRect.sizeDelta = Vector2.zero;
+            CanvasGroup group = _placementPreview.AddComponent<CanvasGroup>();
+            group.interactable = false;
+            group.blocksRaycasts = false;
+
+            _placementHint = AddText(_placementPreview.transform, "Hint", string.Empty, 10f, TextColor, TextAlignmentOptions.TopLeft);
+            _placementHint.richText = false;
+            _placementHint.overflowMode = TextOverflowModes.Overflow;
+            _placementHint.rectTransform.anchorMin = _placementHint.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            _placementHint.rectTransform.pivot = new Vector2(0f, 1f);
+            _placementHint.rectTransform.sizeDelta = new Vector2(250f, 48f);
+        }
+
+        RectTransform canvasRect = _canvas.GetComponent<RectTransform>();
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, Input.mousePosition, GetUiCamera(), out Vector2 mouse))
+        {
+            HidePlacementPreview();
+            return;
+        }
+        _placementPreview.SetActive(true);
+        _placementPreview.transform.SetAsLastSibling();
+        _placementPreviewRect!.anchoredPosition = mouse;
+        Color color = canPlace ? TextColor : MutedTextColor;
+        _placementHint!.color = color;
+        _placementHint.text = UeiI18n.Format(!canPlace ? "placement.blocked"
+            : hasAppearance ? "placement.hint" : "placement.noAppearance", entry.DisplayName);
+        _placementHint.rectTransform.anchoredPosition = new Vector2(Input.mousePosition.x > Screen.width * 0.65f ? -260f : 18f,
+            Input.mousePosition.y < 90f ? 64f : -16f);
+    }
+
     public void Destroy()
     {
         ClearNativeTooltip();
+        if (_placementPreview != null) UnityEngine.Object.Destroy(_placementPreview);
         if (_root != null)
         {
             UnityEngine.Object.Destroy(_root);
@@ -429,28 +561,35 @@ internal sealed class UeiPanel
 
     private void TickAnimation()
     {
-        if (_lastAnimationFrame == Time.frameCount)
+        if (_lastAnimationFrame != Time.frameCount)
         {
-            ApplyAnimation();
-            return;
+            _lastAnimationFrame = Time.frameCount;
+            float target = _wantsVisible ? 1f : 0f;
+            if (_animationProgress != target)
+            {
+                float duration = _wantsVisible ? EnterAnimationSeconds : ExitAnimationSeconds;
+                float direction = _wantsVisible ? 1f : -1f;
+                float deltaTime = Mathf.Min(Time.unscaledDeltaTime, 0.033f);
+                float step = duration <= 0.001f ? 1f : deltaTime / duration;
+                _animationProgress = Mathf.Clamp01(_animationProgress + direction * step);
+            }
         }
-
-        _lastAnimationFrame = Time.frameCount;
-        float duration = _wantsVisible ? EnterAnimationSeconds : ExitAnimationSeconds;
-        float direction = _wantsVisible ? 1f : -1f;
-        float deltaTime = Mathf.Min(Time.unscaledDeltaTime, 0.033f);
-        float step = duration <= 0.001f ? 1f : deltaTime / duration;
-        _animationProgress = Mathf.Clamp01(_animationProgress + direction * step);
         ApplyAnimation();
 
         if (!_wantsVisible && _animationProgress <= 0f && _root.activeSelf)
         {
             _root.SetActive(false);
+            _lastPointerCheckFrame = -1;
         }
     }
 
     private void ApplyAnimation()
     {
+        if (!_animationDirty
+            && _lastAppliedAnimationProgress == _animationProgress
+            && _lastAppliedWantsVisible == _wantsVisible
+            && _lastAppliedSettingsOpen == _settingsOpen) return;
+
         float eased = EaseOutCubic(_animationProgress);
         _panelCanvasGroup.alpha = eased;
         _panelCanvasGroup.interactable = _wantsVisible && _animationProgress > 0.98f;
@@ -464,6 +603,11 @@ internal sealed class UeiPanel
         _settingsCanvasGroup.interactable = _wantsVisible && _settingsOpen && _animationProgress > 0.98f;
         _settingsCanvasGroup.blocksRaycasts = _settingsOpen && _animationProgress > 0.02f;
         _settingsRect.anchoredPosition = DetailShownPosition() + PanelHiddenOffset() * (1f - eased);
+        _animationDirty = false;
+        _lastAppliedAnimationProgress = _animationProgress;
+        _lastAppliedWantsVisible = _wantsVisible;
+        _lastAppliedSettingsOpen = _settingsOpen;
+        _lastPointerCheckFrame = -1;
     }
 
     private static float EaseOutCubic(float value)
@@ -673,7 +817,6 @@ internal sealed class UeiPanel
             _searchText = value ?? string.Empty;
             _page = 0;
             _dirty = true;
-            RefreshGrid();
         });
 
         Button settings = AddButton(bar.transform, "Settings", string.Empty, SearchTextSize, SearchInputHeight, SettingsButtonWidth);
@@ -726,7 +869,20 @@ internal sealed class UeiPanel
             return;
         }
 
-        int delta = ReadWheelPageDelta(frame);
+        bool overAcquisitionScroll = overDetail
+            && _acquisitionScroll != null
+            && _acquisitionScroll.vertical
+            && RectTransformUtility.RectangleContainsScreenPoint(_acquisitionScroll.viewport, Input.mousePosition, uiCamera);
+        int delta = 0;
+        if (overAcquisitionScroll)
+        {
+            // Description supplements scroll without changing detail pages.
+            _wheelAccumulator = 0f;
+        }
+        else
+        {
+            delta = ReadWheelPageDelta(frame);
+        }
         if (delta == 0)
         {
             if (Input.GetKeyDown(KeyCode.PageUp))
@@ -816,9 +972,22 @@ internal sealed class UeiPanel
 
     private void ChangeRecipePage(int delta)
     {
-        _recipePage = Mathf.Clamp(_recipePage + delta, 0, Math.Max(0, _lastRecipePageCount - 1));
+        if (_detailMode == UeiRecipeRelation.ProducedBy && _sourceSection == SourceSection.Acquisition)
+            _acquisitionPage = Mathf.Clamp(_acquisitionPage + delta, 0, Math.Max(0, _lastRecipePageCount - 1));
+        else if (_detailMode != UeiRecipeRelation.ProducedBy || _sourceSection == SourceSection.Crafting)
+            _recipePage = Mathf.Clamp(_recipePage + delta, 0, Math.Max(0, _lastRecipePageCount - 1));
         _detailDirty = true;
         RefreshDetail();
+    }
+
+    private void ResetDetailPages()
+    {
+        _recipePage = 0;
+        _acquisitionPage = 0;
+        _recipeRowsChangeAnchor = -1;
+        _sourceSection = SourceSection.Acquisition;
+        _acquisitionPageAnchor = string.Empty;
+        _restoreAcquisitionPageAnchor = false;
     }
 
     private void ToggleDetailMode()
@@ -831,7 +1000,7 @@ internal sealed class UeiPanel
         _detailMode = _detailMode == UeiRecipeRelation.ProducedBy
             ? UeiRecipeRelation.UsedIn
             : UeiRecipeRelation.ProducedBy;
-        _recipePage = 0;
+        ResetDetailPages();
         _detailDirty = true;
         RefreshDetail();
     }
@@ -844,6 +1013,8 @@ internal sealed class UeiPanel
         _settingsPanel.SetActive(true);
         _pendingPanelScale = CurrentPanelScale();
         RefreshSettings();
+        _lastPointerCheckFrame = -1;
+        ApplyAnimation();
     }
 
     private void CloseSettings()
@@ -857,6 +1028,8 @@ internal sealed class UeiPanel
             _detailDirty = true;
             RefreshDetail();
         }
+        _lastPointerCheckFrame = -1;
+        ApplyAnimation();
     }
 
     private void CloseDetail()
@@ -868,7 +1041,7 @@ internal sealed class UeiPanel
 
         _selectedEntry = null;
         _statusMessage = string.Empty;
-        _recipePage = 0;
+        ResetDetailPages();
         ClearNativeTooltip();
         _detailDirty = true;
         _dirty = true;
@@ -896,6 +1069,13 @@ internal sealed class UeiPanel
 
         AddScaleSettingRow(_settingsContent);
 
+        AddSettingRow(
+            _settingsContent,
+            UeiI18n.T("settings.detailRows"),
+            UeiI18n.Format("settings.detailRows.value", UeiPlugin.GetDetailRowsPerPage()),
+            CycleDetailRowsPerPage,
+            description: UeiI18n.T("settings.detailRows.desc"));
+
         bool hasCheatPermission = HasCheatPermission();
         if (!hasCheatPermission && CheatConfigured())
         {
@@ -922,7 +1102,7 @@ internal sealed class UeiPanel
                 UeiPlugin.PluginAuthor));
     }
 
-    private void AddSettingRow(Transform parent, string label, string value, Action action, bool danger = false, bool enabled = true)
+    private void AddSettingRow(Transform parent, string label, string value, Action action, bool danger = false, bool enabled = true, string? description = null)
     {
         Color rowColor = danger ? new Color(0.55f, 0.04f, 0.02f, 0.72f) : new Color(0f, 0f, 0f, 0.42f);
         Color labelColor = enabled
@@ -933,6 +1113,7 @@ internal sealed class UeiPanel
         rowLayout.preferredHeight = 30f;
         rowLayout.minHeight = 30f;
         AddPixelBorder(row.transform, PixelBorderColor, 1f);
+        if (!string.IsNullOrEmpty(description)) BindTooltip(row, label, description);
 
         HorizontalLayoutGroup group = row.AddComponent<HorizontalLayoutGroup>();
         group.padding = new RectOffset(6, 4, 3, 3);
@@ -1070,12 +1251,12 @@ internal sealed class UeiPanel
         catch { return false; }
     }
 
-    private static bool CheatEnabled()
+    internal static bool CheatEnabled()
     {
         return CheatConfigured() && HasCheatPermission();
     }
 
-    private static bool HasCheatPermission()
+    internal static bool HasCheatPermission()
     {
         TogetherNetworkState togetherState = GetTogetherNetworkState(out _, out _, out _);
         if (togetherState == TogetherNetworkState.Client || togetherState == TogetherNetworkState.Server)
@@ -1152,7 +1333,7 @@ internal sealed class UeiPanel
                 ? TryReadTogetherRuleBool(multiplayerType, "sv_cheats") : null);
     }
 
-    private static TogetherNetworkState GetTogetherNetworkState(
+    internal static TogetherNetworkState GetTogetherNetworkState(
         out Type? conType, out Type? netType, out Type? multiplayerType)
     {
         conType = FindLoadedType("Together.Con");
@@ -1484,6 +1665,29 @@ internal sealed class UeiPanel
         RefreshSettings();
     }
 
+    private void CycleDetailRowsPerPage()
+    {
+        int rows = UeiPlugin.GetDetailRowsPerPage();
+        UeiPlugin.SetDetailRowsPerPage(rows == 4 ? 1 : rows + 1);
+        UpdateDetailPageSize();
+        ClearNativeTooltip();
+        RefreshSettings();
+    }
+
+    private void UpdateDetailPageSize()
+    {
+        int rows = UeiPlugin.GetDetailRowsPerPage();
+        if (rows == _detailPageSize) return;
+
+        // Keep the previous first card on the new page, including after sources finish loading.
+        if (_recipeRowsChangeAnchor < 0) _recipeRowsChangeAnchor = _recipePage * _detailPageSize;
+        _recipePage = _recipeRowsChangeAnchor / rows;
+        _acquisitionPage = _acquisitionPage * _detailPageSize / rows;
+        _restoreAcquisitionPageAnchor = true;
+        _detailPageSize = rows;
+        _detailDirty = true;
+    }
+
     private void ToggleCheatMode()
     {
         if (!HasCheatPermission())
@@ -1498,7 +1702,7 @@ internal sealed class UeiPanel
         UeiPlugin.SetCheatEnabled(enableCheatMode);
         _selectedEntry = null;
         _statusMessage = string.Empty;
-        _recipePage = 0;
+        ResetDetailPages();
         _detailDirty = true;
         _dirty = true;
         RefreshDetail();
@@ -1531,7 +1735,7 @@ internal sealed class UeiPanel
             _ => UeiI18n.T("status.reviveFailed"),
         };
         _statusMessage = status;
-        UpdateSelectionText(FilterEntries().Count());
+        UpdateSelectionText(FilterEntries().Count);
     }
 
     private void RefreshGrid()
@@ -1542,74 +1746,48 @@ internal sealed class UeiPanel
         }
 
         _dirty = false;
-        ClearChildren(_gridContent);
-
-        List<UeiEntry> filtered = FilterEntries().ToList();
+        IReadOnlyList<UeiEntry> filtered = FilterEntries();
         _lastPageCount = Math.Max(1, (filtered.Count + PageSize - 1) / PageSize);
         _page = Mathf.Clamp(_page, 0, _lastPageCount - 1);
         _pageText.text = filtered.Count == 0 ? "0/0" : $"{_page + 1}/{_lastPageCount}";
 
-        List<UeiEntry> pageItems = filtered
-            .Skip(_page * PageSize)
-            .Take(PageSize)
-            .ToList();
-
-        foreach (UeiEntry entry in pageItems)
-        {
-            AddEntryCell(entry);
-        }
-
-        for (int i = pageItems.Count; i < PageSize; i++)
-        {
-            AddEmptyCell();
-        }
-
-        if (_selectedEntry != null && filtered.All(x => x.EntryKey != _selectedEntry.EntryKey))
+        if (_selectedEntry != null && FindEntryIndex(filtered, _selectedEntry.EntryKey) < 0)
         {
             _selectedEntry = null;
             _detailDirty = true;
         }
 
+        while (_gridCells.Count < PageSize) _gridCells.Add(CreateEntryCell(_gridCells.Count));
+        int first = _page * PageSize;
+        for (int i = 0; i < _gridCells.Count; i++)
+        {
+            int index = first + i;
+            BindEntryCell(_gridCells[i], index < filtered.Count ? filtered[index] : null);
+        }
+
         UpdateSelectionText(filtered.Count);
     }
 
-    private IEnumerable<UeiEntry> FilterEntries()
+    private IReadOnlyList<UeiEntry> FilterEntries()
     {
-        IEnumerable<UeiEntry> entries = UeiCatalog.Entries;
-        string category = CurrentCategoryKey();
-
-        if (category == UeiCatalog.CategoryFavorites)
-        {
-            entries = entries.Where(x => x.IsFavorite);
-        }
-        else if (category == UeiCatalog.CategoryLiquid)
-        {
-            entries = entries.Where(x => x.Kind == UeiEntryKind.Liquid);
-        }
-        else if (category != UeiCatalog.CategoryAll)
-        {
-            entries = entries.Where(x => x.Kind == UeiEntryKind.Item
-                && string.Equals(x.CategoryKey, category, StringComparison.OrdinalIgnoreCase));
-        }
-
-        if (!string.IsNullOrWhiteSpace(_searchText))
-        {
-            string search = _searchText.Trim();
-            entries = entries.Where(x => x.SearchText.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0);
-        }
-
-        return entries
-            .OrderByDescending(x => x.IsFavorite)
-            .ThenBy(x => x.Kind)
-            .ThenBy(x => x.CategoryLabel, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(x => x.Id, StringComparer.OrdinalIgnoreCase);
+        return _catalogView.GetEntries(UeiCatalog.Entries, UeiCatalog.Revision,
+            UeiFavorites.Revision, CurrentCategoryKey(), _searchText);
     }
 
-    private void AddEntryCell(UeiEntry entry)
+    private static int FindEntryIndex(IReadOnlyList<UeiEntry> entries, string entryKey)
     {
-        bool selected = _selectedEntry != null && _selectedEntry.EntryKey == entry.EntryKey;
-        GameObject cell = AddImage(_gridContent, "Cell." + entry.EntryKey, selected ? CellSelectedColor : CellColor, raycast: true);
+        for (int i = 0; i < entries.Count; i++)
+        {
+            if (string.Equals(entries[i].EntryKey, entryKey, StringComparison.OrdinalIgnoreCase)) return i;
+        }
+        return -1;
+    }
+
+    private EntryCell CreateEntryCell(int index)
+    {
+        GameObject cell = AddImage(_gridContent, "Cell." + index, CellColor, raycast: false);
+        Image background = cell.GetComponent<Image>();
+        background.enabled = false;
         Button button = cell.AddComponent<Button>();
         ColorBlock colors = button.colors;
         colors.normalColor = Color.white;
@@ -1617,22 +1795,58 @@ internal sealed class UeiPanel
         colors.pressedColor = new Color(0.82f, 0.82f, 0.82f, 1f);
         colors.fadeDuration = 0.04f;
         button.colors = colors;
+        button.enabled = false;
+        button.interactable = false;
         UeiEntryClickHandler click = cell.AddComponent<UeiEntryClickHandler>();
-        click.Init(
-            () => HandleEntryLeftClick(entry),
-            () => SelectEntry(entry, UeiRecipeRelation.UsedIn, linkOriginalRecipe: false));
-
-        BindTooltip(cell, entry);
-
-        Image icon = AddIcon(cell.transform, "Icon", entry.Icon, entry.IconColor, 38f);
-        icon.raycastTarget = false;
-
+        click.Init(HandleEntryLeftClick, entry => SelectEntry(entry, UeiRecipeRelation.UsedIn, linkOriginalRecipe: false));
+        click.enabled = false;
+        UITooltip tooltip = cell.AddComponent<UITooltip>();
+        tooltip.skipLocale = true;
+        tooltip.enabled = false;
+        UeiTooltipRelay relay = cell.AddComponent<UeiTooltipRelay>();
+        relay.enabled = false;
+        Image icon = AddIcon(cell.transform, "Icon", null, Color.white, 38f);
+        icon.enabled = false;
+        return new EntryCell(background, button, icon, click, tooltip, relay);
     }
 
-    private void AddEmptyCell()
+    private void BindEntryCell(EntryCell cell, UeiEntry? entry)
     {
-        GameObject cell = AddImage(_gridContent, "Empty", new Color(0f, 0f, 0f, 0f), raycast: false);
-        cell.GetComponent<Image>().enabled = false;
+        bool rebound = !ReferenceEquals(cell.Click.Entry, entry);
+        if (rebound)
+        {
+            cell.Click.Bind(entry);
+            bool populated = entry != null;
+            cell.Background.enabled = populated;
+            cell.Background.raycastTarget = populated;
+            cell.Button.enabled = populated;
+            cell.Button.interactable = populated;
+            cell.Click.enabled = populated;
+            cell.Icon.enabled = populated;
+            cell.Tooltip.enabled = populated;
+            cell.Relay.enabled = populated;
+            if (entry != null)
+            {
+                SetIcon(cell.Icon, entry.Icon, entry.IconColor, 38f);
+                cell.Tooltip.tipName = BuildTooltipName(entry);
+                cell.Tooltip.tipDesc = BuildTooltipDescription(entry);
+                cell.Relay.Init(cell.Tooltip.tipName, cell.Tooltip.tipDesc);
+            }
+            else
+            {
+                cell.Icon.sprite = null;
+                cell.Tooltip.tipName = string.Empty;
+                cell.Tooltip.tipDesc = string.Empty;
+                cell.Relay.Init(string.Empty, string.Empty);
+            }
+        }
+
+        bool selected = entry != null && _selectedEntry != null && _selectedEntry.EntryKey == entry.EntryKey;
+        if (rebound || selected != cell.Selected)
+        {
+            cell.Background.color = selected ? CellSelectedColor : CellColor;
+            cell.Selected = selected;
+        }
     }
 
     private void HandleEntryLeftClick(UeiEntry entry)
@@ -1643,18 +1857,42 @@ internal sealed class UeiPanel
             return;
         }
 
+        if (entry.Kind == UeiEntryKind.Entity)
+        {
+            if (UeiRuntime.BeginEntityPlacement(entry))
+            {
+                _selectedEntry = entry;
+                _detailMode = UeiRecipeRelation.ProducedBy;
+                ResetDetailPages();
+                _dirty = _detailDirty = true;
+            }
+            else
+            {
+                string failed = UeiI18n.T("status.cheatEntityFailed");
+                SetPlacementStatus(failed);
+                try { PlayerCamera.main?.DoAlert(failed); } catch { }
+            }
+            return;
+        }
+
         CheatActionResult result = TryCheatGiveItem(entry);
         string status = result switch
         {
-            CheatActionResult.Completed => UeiI18n.T("status.cheatSpawned"),
-            CheatActionResult.RequestSent => UeiI18n.T("status.cheatRequestSent"),
+            CheatActionResult.Completed => entry.Kind == UeiEntryKind.Entity
+                ? UeiI18n.Format("status.cheatEntitySpawned", BuildTooltipName(entry))
+                : entry.Kind == UeiEntryKind.Liquid ? UeiI18n.T("status.cheatLiquidGiven")
+                : UeiI18n.Format("status.cheatSpawned", 1, BuildTooltipName(entry)),
+            CheatActionResult.SpawnedNearby => UeiI18n.T("status.cheatSpawnedNearby"),
+            CheatActionResult.RequestSent => UeiI18n.T(entry.Kind == UeiEntryKind.Entity ? "status.cheatSpawnRequestSent" : "status.cheatRequestSent"),
             CheatActionResult.HostRequired => UeiI18n.T("status.cheatHostRequired"),
-            _ => (IsLegalCheatItem(entry) ? UeiI18n.T("status.cheatFailed") : UeiI18n.T("status.cheatIllegal")),
+            _ => IsLegalCheatItem(entry) ? UeiI18n.T(entry.Kind == UeiEntryKind.Entity ? "status.cheatEntityFailed" : "status.cheatFailed") : UeiI18n.T("status.cheatIllegal"),
         };
         _selectedEntry = null;
         _detailMode = UeiRecipeRelation.ProducedBy;
-        _recipePage = 0;
-        _statusMessage = result == CheatActionResult.HostRequired ? status : entry.DisplayName + " - " + status;
+        ResetDetailPages();
+        _statusMessage = result is CheatActionResult.Completed or CheatActionResult.HostRequired
+            ? status : entry.DisplayName + " - " + status;
+        try { PlayerCamera.main?.DoAlert(status); } catch { }
         _detailDirty = true;
         _dirty = true;
         RefreshGrid();
@@ -1665,7 +1903,7 @@ internal sealed class UeiPanel
     {
         _selectedEntry = entry;
         _detailMode = mode;
-        _recipePage = 0;
+        ResetDetailPages();
         _detailDirty = true;
         if (linkOriginalRecipe)
         {
@@ -1683,15 +1921,15 @@ internal sealed class UeiPanel
 
     private void FocusGridEntry(UeiEntry entry)
     {
-        List<UeiEntry> filtered = FilterEntries().ToList();
-        int index = filtered.FindIndex(x => string.Equals(x.EntryKey, entry.EntryKey, StringComparison.OrdinalIgnoreCase));
+        IReadOnlyList<UeiEntry> filtered = FilterEntries();
+        int index = FindEntryIndex(filtered, entry.EntryKey);
         if (index < 0)
         {
             _categoryIndex = 0;
             _searchText = string.Empty;
             _searchInput.SetTextWithoutNotify(string.Empty);
-            filtered = FilterEntries().ToList();
-            index = filtered.FindIndex(x => string.Equals(x.EntryKey, entry.EntryKey, StringComparison.OrdinalIgnoreCase));
+            filtered = FilterEntries();
+            index = FindEntryIndex(filtered, entry.EntryKey);
         }
 
         if (index >= 0)
@@ -1702,6 +1940,8 @@ internal sealed class UeiPanel
 
     private static bool IsLegalCheatItem(UeiEntry entry)
     {
+        if (entry.Kind == UeiEntryKind.Entity) return UeiEntities.Contains(entry.Id);
+        if (entry.Kind == UeiEntryKind.Liquid) return Liquids.LiquidExists(entry.Id);
         return TryGetLegalCheatItem(entry, out _, out _);
     }
 
@@ -1746,6 +1986,8 @@ internal sealed class UeiPanel
 
     private static CheatActionResult TryCheatGiveItem(UeiEntry entry)
     {
+        if (entry.Kind == UeiEntryKind.Entity) return CheatActionResult.Failed;
+        if (entry.Kind == UeiEntryKind.Liquid) return TryCheatGiveLiquid(entry);
         if (!HasCheatPermission() || !TryGetLegalCheatItem(entry, out bool customItem, out bool resourceItem))
         {
             return CheatActionResult.Failed;
@@ -1796,6 +2038,7 @@ internal sealed class UeiPanel
             }
             if (inst == null)
             {
+                UeiPlugin.LogWarning($"UEI cheat give failed for {entry.Id}: factory returned no live object.");
                 return CheatActionResult.Failed;
             }
 
@@ -1818,13 +2061,58 @@ internal sealed class UeiPanel
             catch { }
 
             body.AutoPickUpItem(item);
-            return CheatActionResult.Completed;
+            bool delivered = body.GetAllItemsThorough().Contains(item);
+            UeiPlugin.LogInfo($"UEI cheat give result id={entry.Id}; location={(delivered ? "inventory" : "world")}; custom={customItem}");
+            return delivered ? CheatActionResult.Completed : CheatActionResult.SpawnedNearby;
         }
         catch (Exception ex)
         {
             UeiPlugin.LogWarning($"UEI cheat give failed for {entry.Id}: {ex.Message}");
             return CheatActionResult.Failed;
         }
+    }
+
+    internal static CheatActionResult TryCheatSpawnEntity(UeiEntry entry, Vector2 position)
+    {
+        if (entry.Kind != UeiEntryKind.Entity || !CheatEnabled() || !UeiEntities.Contains(entry.Id)
+            || !UeiWorldSpawning.IsSafeToken(entry.Id)
+            || !UeiWorldSpawning.IsFinite(position.x) || !UeiWorldSpawning.IsFinite(position.y))
+            return CheatActionResult.Failed;
+        Body? body = PlayerCamera.main?.body;
+        if (body == null) return CheatActionResult.Failed;
+        UeiGiveRoute route = UeiCheatPolicy.WorldRoute(GetTogetherNetworkState(out _, out _, out _));
+        if (route == UeiGiveRoute.ServerCommand)
+            return TryExecuteTogetherAdminCommand(UeiWorldSpawning.EntityCommand(entry.Id, position));
+        if (route != UeiGiveRoute.LocalFactory) return CheatActionResult.Failed;
+        try
+        {
+            return UeiWorldSpawning.SpawnEntity(entry.Id, position) ? CheatActionResult.Completed : CheatActionResult.Failed;
+        }
+        catch (Exception ex)
+        {
+            UeiPlugin.LogWarning($"UEI entity spawn failed for {entry.Id}: {ex.Message}");
+            return CheatActionResult.Failed;
+        }
+    }
+
+    private static CheatActionResult TryCheatGiveLiquid(UeiEntry entry)
+    {
+        if (!HasCheatPermission() || !UeiWorldSpawning.IsSafeToken(entry.Id) || !Liquids.LiquidExists(entry.Id))
+            return CheatActionResult.Failed;
+        UeiGiveRoute route = UeiCheatPolicy.WorldRoute(GetTogetherNetworkState(out _, out _, out _));
+        if (route == UeiGiveRoute.ServerCommand)
+        {
+            UeiWorldSpawning.EnsureCommands(immediate: true);
+            return TryExecuteTogetherAdminCommand(UeiWorldSpawning.LiquidCommand + " " + entry.Id);
+        }
+        Body? body = PlayerCamera.main?.body;
+        if (route != UeiGiveRoute.LocalFactory || body == null) return CheatActionResult.Failed;
+        return UeiWorldSpawning.GiveLiquid(body, entry.Id) switch
+        {
+            UeiWorldSpawnResult.Completed => CheatActionResult.Completed,
+            UeiWorldSpawnResult.Nearby => CheatActionResult.SpawnedNearby,
+            _ => CheatActionResult.Failed,
+        };
     }
 
     private static CheatActionResult TryCheatRevive()
@@ -1969,6 +2257,11 @@ internal sealed class UeiPanel
 
     private void TryLinkOriginalRecipes(UeiEntry entry)
     {
+        if (entry.Kind == UeiEntryKind.Entity)
+        {
+            _statusMessage = UeiI18n.T("status.detailOnly");
+            return;
+        }
         if (entry.Kind != UeiEntryKind.Item)
         {
             _statusMessage = _detailMode == UeiRecipeRelation.ProducedBy ? UeiI18n.T("status.liquidSource") : UeiI18n.T("status.liquidUse");
@@ -2086,7 +2379,10 @@ internal sealed class UeiPanel
 
     private void RefreshDetail()
     {
+        UpdateDetailPageSize();
+        _lastPointerCheckFrame = -1;
         _detailDirty = false;
+        _acquisitionScroll = null;
         ClearChildren(_recipeContent);
 
         if (_settingsOpen)
@@ -2103,29 +2399,94 @@ internal sealed class UeiPanel
 
         _detailPanel.SetActive(true);
         List<UeiRecipeLink> links = CurrentRecipeLinks();
-        _lastRecipePageCount = Math.Max(1, (links.Count + RecipePageSize - 1) / RecipePageSize);
+        _lastRecipePageCount = Math.Max(1, (links.Count + _detailPageSize - 1) / _detailPageSize);
         _recipePage = Mathf.Clamp(_recipePage, 0, _lastRecipePageCount - 1);
+        _recipeRowsChangeAnchor = -1;
         _detailModeText.text = _detailMode == UeiRecipeRelation.ProducedBy
             ? UeiI18n.T("detail.mode.source")
             : UeiI18n.T("detail.mode.uses");
         _detailTitleText.text = DetailModeLabel(_detailMode) + ": " + _selectedEntry.DisplayName;
-        _recipePageText.text = links.Count == 0 ? "0/0" : $"{_recipePage + 1}/{_lastRecipePageCount}";
 
         Recipe? currentRecipe = links
-            .Skip(_recipePage * RecipePageSize)
+            .Skip(_recipePage * _detailPageSize)
             .Select(link => link.Recipe)
             .FirstOrDefault(r => r != null);
         AddEntrySummary(_recipeContent, _selectedEntry, currentRecipe);
+        _detailCardScale = DetailCardScale(_detailMode == UeiRecipeRelation.ProducedBy, hasNotice: false);
 
+        if (_selectedEntry.Kind == UeiEntryKind.Entity)
+        {
+            _lastRecipePageCount = 1;
+            _recipePageText.text = "1/1";
+            AddAcquisitionTextCard(_recipeContent, "EntityDescription", UeiI18n.T("category.entity"),
+                string.IsNullOrWhiteSpace(_selectedEntry.Description) ? UeiI18n.T("entity.noDescription") : _selectedEntry.Description,
+                EntityDescriptionTextHeight(), renderRichText: true);
+            return;
+        }
+
+        if (_detailMode == UeiRecipeRelation.ProducedBy)
+        {
+            List<UeiAcquisitionCard> cards = UeiAcquisitionCard.Build(UeiNativeAcquisition.Index, _selectedEntry.Kind, _selectedEntry.Id);
+            bool hasSupplement = !string.IsNullOrWhiteSpace(_selectedEntry.AcquisitionSupplement);
+            if (_sourceSection == SourceSection.Supplement && !hasSupplement) _sourceSection = SourceSection.Acquisition;
+            AddSourceSections(_recipeContent, cards.Count, links.Count, hasSupplement);
+
+            if (_sourceSection == SourceSection.Acquisition)
+            {
+                _lastRecipePageCount = Math.Max(1, (cards.Count + _detailPageSize - 1) / _detailPageSize);
+                if (_restoreAcquisitionPageAnchor && !string.IsNullOrEmpty(_acquisitionPageAnchor))
+                {
+                    int anchor = cards.FindIndex(card => card.Key == _acquisitionPageAnchor);
+                    if (anchor >= 0) _acquisitionPage = anchor / _detailPageSize;
+                }
+                _restoreAcquisitionPageAnchor = false;
+                _acquisitionPage = Mathf.Clamp(_acquisitionPage, 0, _lastRecipePageCount - 1);
+                _recipePageText.text = cards.Count == 0 ? "0/0" : $"{_acquisitionPage + 1}/{_lastRecipePageCount}";
+                _acquisitionPageAnchor = cards.Count == 0 ? string.Empty : cards[_acquisitionPage * _detailPageSize].Key;
+
+                string state = UeiNativeAcquisition.State == UeiAcquisitionLoadState.Loading ? UeiI18n.T("acquisition.loading")
+                    : UeiNativeAcquisition.State == UeiAcquisitionLoadState.Ready ? string.Empty : UeiI18n.T("acquisition.incomplete");
+                if (cards.Count == 0)
+                    AddAcquisitionTextCard(_recipeContent, "AcquisitionEmpty", UeiI18n.T("detail.acquisition"),
+                        string.IsNullOrEmpty(state) ? UeiI18n.T("detail.noAcquisition") : state, AcquisitionMaxTextHeight);
+                else
+                {
+                    _detailCardScale = DetailCardScale(hasSourceSections: true, hasNotice: !string.IsNullOrEmpty(state));
+                    foreach (UeiAcquisitionCard card in cards.Skip(_acquisitionPage * _detailPageSize).Take(_detailPageSize))
+                        AddAcquisitionCard(_recipeContent, _selectedEntry, card);
+                    if (!string.IsNullOrEmpty(state))
+                    {
+                        TextMeshProUGUI notice = AddText(_recipeContent, "AcquisitionState", state, 9f, MutedTextColor, TextAlignmentOptions.TopLeft);
+                        notice.richText = false;
+                        LayoutElement noticeLayout = notice.GetOrAddLayoutElement();
+                        noticeLayout.preferredHeight = AcquisitionNoticeHeight;
+                        noticeLayout.minHeight = AcquisitionNoticeHeight;
+                    }
+                }
+                return;
+            }
+
+            if (_sourceSection == SourceSection.Supplement)
+            {
+                _lastRecipePageCount = 1;
+                _recipePageText.text = "1/1";
+                AddAcquisitionTextCard(_recipeContent, "AcquisitionSupplement", UeiI18n.T("detail.supplement"),
+                    _selectedEntry.AcquisitionSupplement, AcquisitionNotesTextHeight);
+                return;
+            }
+        }
+
+        _recipePageText.text = links.Count == 0 ? "0/0" : $"{_recipePage + 1}/{_lastRecipePageCount}";
         if (links.Count == 0)
         {
-            TextMeshProUGUI empty = AddText(_recipeContent, "Empty", UeiI18n.T("detail.empty"), 11f, MutedTextColor, TextAlignmentOptions.MidlineLeft);
+            string emptyKey = _detailMode == UeiRecipeRelation.ProducedBy ? "detail.empty" : "detail.emptyUses";
+            TextMeshProUGUI empty = AddText(_recipeContent, "Empty", UeiI18n.T(emptyKey), 11f, MutedTextColor, TextAlignmentOptions.MidlineLeft);
             LayoutElement emptyLayout = empty.GetOrAddLayoutElement();
             emptyLayout.preferredHeight = 28f;
             return;
         }
 
-        foreach (UeiRecipeLink link in links.Skip(_recipePage * RecipePageSize).Take(RecipePageSize))
+        foreach (UeiRecipeLink link in links.Skip(_recipePage * _detailPageSize).Take(_detailPageSize))
         {
             Recipe? recipe = link.Recipe;
             if (recipe != null)
@@ -2135,12 +2496,242 @@ internal sealed class UeiPanel
         }
     }
 
+    private float DetailCardScale(bool hasSourceSections, bool hasNotice)
+    {
+        float fixedHeight = DetailHeaderHeight + DetailSummaryHeight
+            + (hasSourceSections ? DetailHeaderHeight : 0f)
+            + (hasNotice ? AcquisitionNoticeHeight : 0f);
+        int gaps = 1 + _detailPageSize + (hasSourceSections ? 1 : 0) + (hasNotice ? 1 : 0);
+        float availableHeight = _detailRect.sizeDelta.y - fixedHeight - PanelSpacing * gaps;
+        return Mathf.Min(1f, Mathf.Max(1f, availableHeight) / (_detailPageSize * RecipeCardHeight));
+    }
+
+    private void AddSourceSections(Transform parent, int acquisitionCount, int recipeCount, bool hasSupplement)
+    {
+        GameObject row = NewUiObject("SourceSections", parent);
+        LayoutElement layout = row.AddComponent<LayoutElement>();
+        layout.preferredHeight = DetailHeaderHeight;
+        layout.minHeight = DetailHeaderHeight;
+        HorizontalLayoutGroup group = row.AddComponent<HorizontalLayoutGroup>();
+        group.spacing = 4f;
+        group.childControlWidth = true;
+        group.childControlHeight = true;
+        group.childForceExpandWidth = true;
+        group.childForceExpandHeight = false;
+        AddSourceSectionButton(row.transform, SourceSection.Acquisition, UeiI18n.T("detail.acquisition") + " " + acquisitionCount);
+        AddSourceSectionButton(row.transform, SourceSection.Crafting, UeiI18n.T("detail.craftingRecipes") + " " + recipeCount);
+        if (hasSupplement) AddSourceSectionButton(row.transform, SourceSection.Supplement, UeiI18n.T("detail.supplement"));
+    }
+
+    private void AddSourceSectionButton(Transform parent, SourceSection section, string label)
+    {
+        Button button = AddButton(parent, section.ToString(), label, 9f, DetailHeaderHeight, 0f);
+        LayoutElement layout = button.GetComponent<LayoutElement>();
+        layout.flexibleWidth = 1f;
+        layout.minWidth = 0f;
+        button.GetComponent<Image>().color = _sourceSection == section ? CellSelectedColor : SearchColor;
+        button.onClick.AddListener(() =>
+        {
+            if (_sourceSection == section) return;
+            _sourceSection = section;
+            ClearNativeTooltip();
+            _detailDirty = true;
+            RefreshDetail();
+        });
+    }
+
+    private void AddAcquisitionCard(Transform parent, UeiEntry result, UeiAcquisitionCard source)
+    {
+        GameObject card = AddRecipeCardFrame(parent, "Acquisition." + source.Key, out RectTransform content);
+        BindTooltip(card, source.Title, source.Tooltip);
+        float contentWidth = content.sizeDelta.x;
+
+        TextMeshProUGUI title = AddText(content, "Title", source.Title, 10f, TextColor, TextAlignmentOptions.TopLeft);
+        SetAcquisitionTextRect(title, 4f, 16f);
+        title.enableWordWrapping = false;
+        title.richText = false;
+        title.overflowMode = TextOverflowModes.Ellipsis;
+        TextMeshProUGUI method = AddText(content, "Method", source.Method, 9f, MutedTextColor, TextAlignmentOptions.TopLeft);
+        SetAcquisitionTextRect(method, 22f, 13f);
+        method.enableWordWrapping = false;
+        method.richText = false;
+        method.overflowMode = TextOverflowModes.Ellipsis;
+        TextMeshProUGUI facts = AddText(content, "Facts", source.Facts, 9f, TextColor, TextAlignmentOptions.TopLeft);
+        SetAcquisitionTextRect(facts, 38f, 28f);
+        facts.richText = false;
+
+        UeiEntry? sourceItem = null;
+        if (source.Route.Container != null) UeiCatalog.TryGetEntry(UeiEntryKind.Item, source.Route.Container.Id, out sourceItem);
+        Sprite? sourceIcon = source.Route.Building == null ? null : UeiNativeAcquisition.GetBuildingIcon(source.Route.Building.Key);
+        if (sourceIcon == null)
+        {
+            foreach (UeiAcquisitionRoute variant in source.Routes)
+            {
+                if (variant.Building == null) continue;
+                sourceIcon = UeiNativeAcquisition.GetBuildingIcon(variant.Building.Key);
+                if (sourceIcon != null) break;
+            }
+        }
+        GameObject origin = AddAcquisitionNode(content, "Origin", 8f, sourceItem, sourceIcon, source.SourceFallback);
+        BindTooltip(origin, source.Title, source.Tooltip);
+
+        if (source.ViaContainer != null)
+        {
+            UeiCatalog.TryGetEntry(UeiEntryKind.Item, source.ViaContainer.Id, out UeiEntry? container);
+            GameObject via = AddAcquisitionNode(content, "ViaContainer", (contentWidth - RecipeIconSize - 8f) * 0.5f,
+                container, null, UeiI18n.T("acquisition.card.containerIcon"));
+            if (container == null) BindTooltip(via, UeiI18n.ItemText(source.ViaContainer.Id, source.ViaContainer.Name), source.Tooltip);
+            float sourceCenter = 8f + (RecipeIconSize + 8f) * 0.5f;
+            AddAcquisitionArrow(content, (sourceCenter + contentWidth * 0.5f) * 0.5f);
+            AddAcquisitionArrow(content, (contentWidth * 0.5f + contentWidth - sourceCenter) * 0.5f);
+        }
+        else AddAcquisitionArrow(content, contentWidth * 0.5f);
+
+        AddAcquisitionNode(content, "Result", contentWidth - RecipeIconSize - 16f, result, null, string.Empty);
+        if (!string.IsNullOrEmpty(source.ResultBadge))
+        {
+            TextMeshProUGUI amount = AddText(content, "ResultAmount", source.ResultBadge, 9f, TextColor, TextAlignmentOptions.BottomRight);
+            RectTransform rt = amount.rectTransform;
+            rt.anchorMin = new Vector2(1f, 0f);
+            rt.anchorMax = new Vector2(1f, 0f);
+            rt.pivot = new Vector2(1f, 0f);
+            rt.anchoredPosition = new Vector2(-8f, 50f);
+            rt.sizeDelta = new Vector2(110f, 14f);
+            amount.enableWordWrapping = false;
+        }
+    }
+
+    private static void SetAcquisitionTextRect(TextMeshProUGUI text, float top, float height)
+    {
+        RectTransform rt = text.rectTransform;
+        rt.anchorMin = new Vector2(0f, 1f);
+        rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(0f, 1f);
+        rt.anchoredPosition = new Vector2(6f, -top);
+        rt.sizeDelta = new Vector2(-12f, height);
+    }
+
+    private GameObject AddAcquisitionNode(Transform parent, string name, float x, UeiEntry? entry, Sprite? sprite, string fallback)
+    {
+        GameObject node = AddImage(parent, name, new Color(1f, 1f, 1f, 0.08f), raycast: true);
+        RectTransform rt = node.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.zero;
+        rt.pivot = Vector2.zero;
+        rt.anchoredPosition = new Vector2(x, 8f);
+        rt.sizeDelta = new Vector2(RecipeIconSize + 8f, RecipeIconSize + 8f);
+        AddPixelBorder(node.transform, PixelBorderColor, 1f);
+        Sprite? icon = entry?.Icon ?? sprite;
+        if (icon != null || entry != null) AddIcon(node.transform, "Icon", icon, entry?.IconColor ?? Color.white, RecipeIconSize);
+        else
+        {
+            TextMeshProUGUI text = AddText(node.transform, "Fallback", fallback, 8f, MutedTextColor, TextAlignmentOptions.Center);
+            text.rectTransform.SetStretch();
+        }
+        if (entry != null)
+        {
+            UeiEntry target = entry;
+            node.AddComponent<Button>().onClick.AddListener(() => SelectEntry(target, UeiRecipeRelation.ProducedBy, linkOriginalRecipe: false));
+            BindTooltip(node, target);
+        }
+        return node;
+    }
+
+    private void AddAcquisitionArrow(Transform parent, float x)
+    {
+        TextMeshProUGUI arrow = AddText(parent, "Arrow", "→", 16f, MutedTextColor, TextAlignmentOptions.Center);
+        RectTransform rt = arrow.rectTransform;
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.zero;
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = new Vector2(x, 28f);
+        rt.sizeDelta = new Vector2(24f, 32f);
+    }
+
+    private float EntityDescriptionTextHeight()
+        => Mathf.Max(16f, _detailRect.rect.height - DetailHeaderHeight - DetailSummaryHeight
+            - PanelSpacing * 2f - AcquisitionPadding * 2f - AcquisitionTitleHeight - AcquisitionTextGap);
+
+    private void AddAcquisitionTextCard(Transform parent, string name, string heading, string sourceText, float maxTextHeight,
+        bool renderRichText = false)
+    {
+        GameObject card = AddImage(parent, name, new Color(0f, 0f, 0f, 0.52f), raycast: true);
+        AddPixelBorder(card.transform, PixelBorderColor, 1f);
+
+        TextMeshProUGUI title = AddText(card.transform, "Title", heading, 10f, TextColor, TextAlignmentOptions.TopLeft);
+        RectTransform titleRt = title.rectTransform;
+        titleRt.anchorMin = new Vector2(0f, 1f);
+        titleRt.anchorMax = new Vector2(1f, 1f);
+        titleRt.pivot = new Vector2(0f, 1f);
+        titleRt.anchoredPosition = new Vector2(AcquisitionPadding, -AcquisitionPadding);
+        titleRt.sizeDelta = new Vector2(-AcquisitionPadding * 2f, AcquisitionTitleHeight);
+
+        RectTransform viewport = AddImage(card.transform, "Viewport", TransparentBlockerColor, raycast: true).GetComponent<RectTransform>();
+        viewport.SetStretch();
+        viewport.offsetMin = new Vector2(AcquisitionPadding, AcquisitionPadding);
+        viewport.offsetMax = new Vector2(-AcquisitionPadding, -(AcquisitionPadding + AcquisitionTitleHeight + AcquisitionTextGap));
+        viewport.gameObject.AddComponent<RectMask2D>();
+
+        TextMeshProUGUI body = AddText(viewport, "Text", sourceText, 10f, MutedTextColor, TextAlignmentOptions.TopLeft);
+        body.richText = renderRichText;
+        if (renderRichText && GlobalDark.main != null && GlobalDark.main.tooltipDescObj != null)
+        {
+            TextMeshProUGUI native = GlobalDark.main.tooltipDescObj;
+            if (native.font != null)
+            {
+                body.font = native.font;
+                body.fontSharedMaterial = native.fontSharedMaterial;
+            }
+            body.spriteAsset = native.spriteAsset;
+            body.parseCtrlCharacters = native.parseCtrlCharacters;
+        }
+        body.overflowMode = TextOverflowModes.Overflow;
+        float textWidth = DetailPanelWidth - AcquisitionPadding * 2f - AcquisitionScrollbarWidth;
+        float textHeight = Mathf.Max(16f, Mathf.Ceil(body.GetPreferredValues(sourceText, textWidth, float.PositiveInfinity).y));
+        float visibleHeight = Mathf.Min(textHeight, maxTextHeight);
+        RectTransform bodyRt = body.rectTransform;
+        bodyRt.anchorMin = new Vector2(0f, 1f);
+        bodyRt.anchorMax = new Vector2(1f, 1f);
+        bodyRt.pivot = new Vector2(0f, 1f);
+        bodyRt.anchoredPosition = Vector2.zero;
+        bodyRt.sizeDelta = new Vector2(-AcquisitionScrollbarWidth, textHeight);
+
+        float cardHeight = AcquisitionPadding * 2f + AcquisitionTitleHeight + AcquisitionTextGap + visibleHeight;
+        LayoutElement layout = card.AddComponent<LayoutElement>();
+        layout.preferredHeight = cardHeight;
+        layout.minHeight = cardHeight;
+
+        _acquisitionScroll = viewport.gameObject.AddComponent<ScrollRect>();
+        _acquisitionScroll.viewport = viewport;
+        _acquisitionScroll.content = bodyRt;
+        _acquisitionScroll.horizontal = false;
+        _acquisitionScroll.vertical = textHeight > visibleHeight;
+        _acquisitionScroll.movementType = ScrollRect.MovementType.Clamped;
+        _acquisitionScroll.inertia = false;
+        _acquisitionScroll.scrollSensitivity = 18f;
+
+        GameObject scrollbarObject = AddImage(viewport, "Scrollbar", new Color(0f, 0f, 0f, 0.3f), raycast: true);
+        RectTransform scrollbarRt = scrollbarObject.GetComponent<RectTransform>();
+        scrollbarRt.anchorMin = new Vector2(1f, 0f);
+        scrollbarRt.anchorMax = new Vector2(1f, 1f);
+        scrollbarRt.offsetMin = new Vector2(-(AcquisitionScrollbarWidth - 2f), 0f);
+        scrollbarRt.offsetMax = Vector2.zero;
+        GameObject handle = AddImage(scrollbarRt, "Handle", PixelBorderColor, raycast: true);
+        handle.GetComponent<RectTransform>().SetStretch();
+        Scrollbar scrollbar = scrollbarObject.AddComponent<Scrollbar>();
+        scrollbar.handleRect = handle.GetComponent<RectTransform>();
+        scrollbar.targetGraphic = handle.GetComponent<Image>();
+        scrollbar.direction = Scrollbar.Direction.BottomToTop;
+        _acquisitionScroll.verticalScrollbar = scrollbar;
+        _acquisitionScroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
+    }
+
     private void AddEntrySummary(Transform parent, UeiEntry entry, Recipe? recipe)
     {
         GameObject row = AddImage(parent, "EntrySummary", new Color(0f, 0f, 0f, 0.40f), raycast: true);
         LayoutElement layout = row.AddComponent<LayoutElement>();
-        layout.preferredHeight = 44f;
-        layout.minHeight = 44f;
+        layout.preferredHeight = DetailSummaryHeight;
+        layout.minHeight = DetailSummaryHeight;
         AddPixelBorder(row.transform, PixelBorderColor, 1f);
 
         Image icon = AddIcon(row.transform, "Icon", entry.Icon, entry.IconColor, 34f);
@@ -2249,14 +2840,10 @@ internal sealed class UeiPanel
 
     private void AddRecipeCard(Transform parent, UeiRecipeLink link, Recipe recipe)
     {
-        GameObject card = AddImage(parent, "Recipe." + link.RecipeIndex, new Color(0f, 0f, 0f, 0.52f), raycast: true);
-        LayoutElement layout = card.AddComponent<LayoutElement>();
-        layout.preferredHeight = RecipeCardHeight;
-        layout.minHeight = RecipeCardHeight;
-        AddPixelBorder(card.transform, PixelBorderColor, 1f);
+        AddRecipeCardFrame(parent, "Recipe." + link.RecipeIndex, out RectTransform content);
 
         string state = (link.Visible ? UeiI18n.T("recipe.visible") : UeiI18n.T("recipe.locked")) + " / " + (link.HasMadeBefore ? UeiI18n.T("recipe.made") : UeiI18n.T("recipe.new"));
-        TextMeshProUGUI title = AddText(card.transform, "Title", SafeRecipeName(recipe) + "\n" + RecipeCategoryLabel(recipe) + "  " + UeiI18n.T("recipe.int") + " " + recipe.INT + "  " + state, 10f, TextColor, TextAlignmentOptions.TopLeft);
+        TextMeshProUGUI title = AddText(content, "Title", SafeRecipeName(recipe) + "\n" + RecipeCategoryLabel(recipe) + "  " + UeiI18n.T("recipe.int") + " " + recipe.INT + "  " + state, 10f, TextColor, TextAlignmentOptions.TopLeft);
         RectTransform titleRt = title.rectTransform;
         titleRt.anchorMin = new Vector2(0f, 1f);
         titleRt.anchorMax = new Vector2(1f, 1f);
@@ -2265,9 +2852,28 @@ internal sealed class UeiPanel
         titleRt.offsetMax = new Vector2(-6f, -4f);
         title.enableWordWrapping = false;
 
-        AddRecipePinButton(card.transform, recipe);
-        AddRecipeResult(card.transform, recipe);
-        AddRecipeIngredients(card.transform, recipe);
+        AddRecipePinButton(content, recipe);
+        AddRecipeResult(content, recipe);
+        AddRecipeIngredients(content, recipe);
+    }
+
+    private GameObject AddRecipeCardFrame(Transform parent, string name, out RectTransform content)
+    {
+        GameObject card = AddImage(parent, name, new Color(0f, 0f, 0f, 0.52f), raycast: true);
+        LayoutElement layout = card.AddComponent<LayoutElement>();
+        layout.preferredHeight = RecipeCardHeight * _detailCardScale;
+        layout.minHeight = layout.preferredHeight;
+        AddPixelBorder(card.transform, PixelBorderColor, 1f);
+
+        content = NewUiObject("Content", card.transform).GetComponent<RectTransform>();
+        content.anchorMin = new Vector2(0f, 1f);
+        content.anchorMax = new Vector2(0f, 1f);
+        content.pivot = new Vector2(0f, 1f);
+        content.anchoredPosition = Vector2.zero;
+        content.sizeDelta = new Vector2(DetailPanelWidth / _detailCardScale, RecipeCardHeight);
+        content.localScale = Vector3.one * _detailCardScale;
+
+        return card;
     }
 
     private void AddRecipePinButton(Transform parent, Recipe recipe)
@@ -2774,6 +3380,9 @@ internal sealed class UeiPanel
 
     private static string BuildTooltipDescription(UeiEntry entry)
     {
+        if (entry.Kind == UeiEntryKind.Entity)
+            return (string.IsNullOrWhiteSpace(entry.Description) ? string.Empty : entry.Description + "\n\n")
+                + UeiI18n.T("tooltip.id") + ": " + entry.Id;
         if (entry.Kind == UeiEntryKind.Liquid)
         {
             LiquidType? liquid = entry.LiquidInfo;
@@ -2909,12 +3518,15 @@ internal sealed class UeiPanel
 
     private void UpdatePanelSize(PlayerCamera camera)
     {
+        UpdateDetailPageSize();
         string position = CurrentPositionMode();
         float panelScale = CurrentPanelScale();
+        float scale = Mathf.Max(0.01f, camera.mainCanvas.transform.localScale.y);
         if (Screen.width == _lastScreenWidth
             && Screen.height == _lastScreenHeight
             && string.Equals(position, _lastPanelPosition, StringComparison.OrdinalIgnoreCase)
-            && Mathf.Abs(panelScale - _lastPanelScale) < 0.001f)
+            && Mathf.Abs(panelScale - _lastPanelScale) < 0.001f
+            && Mathf.Abs(scale - _lastCanvasScale) < 0.001f)
         {
             return;
         }
@@ -2923,7 +3535,10 @@ internal sealed class UeiPanel
         _lastScreenHeight = Screen.height;
         _lastPanelPosition = position;
         _lastPanelScale = panelScale;
-        float scale = Mathf.Max(0.01f, camera.mainCanvas.transform.localScale.y);
+        _lastCanvasScale = scale;
+        _detailDirty = true;
+        _animationDirty = true;
+        _lastPointerCheckFrame = -1;
         float screenWidth = Screen.width / scale;
         float screenHeight = Screen.height / scale;
         ApplyPanelAnchors();
@@ -2947,11 +3562,9 @@ internal sealed class UeiPanel
             + PanelSpacing + SearchInputHeight;
         float height = Mathf.Min(contentHeight, Mathf.Max(contentHeight, screenHeight * 0.95f / panelScale));
         _panelRect.sizeDelta = new Vector2(width, height);
-        _panelRect.anchoredPosition = PanelShownPosition();
-        _detailRect.sizeDelta = new Vector2(DetailPanelWidth, height);
-        _detailRect.anchoredPosition = DetailShownPosition();
+        float detailHeight = Mathf.Min(height, screenHeight * 0.95f / panelScale);
+        _detailRect.sizeDelta = new Vector2(DetailPanelWidth, detailHeight);
         _settingsRect.sizeDelta = new Vector2(DetailPanelWidth, Math.Min(320f, height));
-        _settingsRect.anchoredPosition = DetailShownPosition();
     }
 
     private Vector2 DetailShownPosition()
@@ -3179,8 +3792,6 @@ internal sealed class UeiPanel
     {
         GameObject go = NewUiObject(name, parent);
         Image image = go.AddComponent<Image>();
-        image.sprite = sprite;
-        image.color = sprite != null ? color : new Color(0.38f, 0.40f, 0.42f, 1f);
         image.preserveAspect = true;
         image.raycastTarget = false;
 
@@ -3189,13 +3800,21 @@ internal sealed class UeiPanel
         rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.anchoredPosition = Vector2.zero;
+        SetIcon(image, sprite, color, maxSize);
+        return image;
+    }
+
+    private static void SetIcon(Image image, Sprite? sprite, Color color, float maxSize)
+    {
+        bool missing = sprite == null || sprite.texture == null;
+        image.sprite = missing ? UeiMissingIcon.Sprite : sprite;
+        image.color = missing ? Color.white : color;
+        RectTransform rt = image.rectTransform;
         rt.sizeDelta = new Vector2(maxSize, maxSize);
-        if (sprite != null && sprite.texture != null)
+        if (!missing && sprite != null && sprite.texture != null)
         {
             rt.sizeDelta = PlayerCamera.ImageSizeDelta(sprite.texture, 3f, maxSize);
         }
-
-        return image;
     }
 
     private GameObject AddImage(Transform parent, string name, Color color, bool raycast)
@@ -3296,35 +3915,6 @@ internal sealed class UeiPanel
             && mouse.y <= max.y + PointerBoundsPadding;
     }
 
-    private bool IsPointerOverPanelGraphic()
-    {
-        EventSystem eventSystem = EventSystem.current;
-        if (eventSystem == null)
-        {
-            return false;
-        }
-
-        PointerEventData eventData = new(eventSystem)
-        {
-            position = Input.mousePosition
-        };
-        List<RaycastResult> results = new();
-        eventSystem.RaycastAll(eventData, results);
-        for (int i = 0; i < results.Count; i++)
-        {
-            GameObject hit = results[i].gameObject;
-            if (hit != null
-                && (hit.transform.IsChildOf(_panelRect)
-                    || hit.transform.IsChildOf(_detailRect)
-                    || hit.transform.IsChildOf(_settingsRect)))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     private static TMP_FontAsset? FindFont(Canvas canvas)
     {
         try
@@ -3408,83 +3998,5 @@ internal static class UeiRectTransformExtensions
     {
         return component.gameObject.GetComponent<LayoutElement>()
             ?? component.gameObject.AddComponent<LayoutElement>();
-    }
-}
-
-internal sealed class UeiEntryClickHandler : MonoBehaviour, IPointerClickHandler
-{
-    private Action? _leftClick;
-    private Action? _rightClick;
-
-    public void Init(Action leftClick, Action rightClick)
-    {
-        _leftClick = leftClick;
-        _rightClick = rightClick;
-    }
-
-    public void OnPointerClick(PointerEventData eventData)
-    {
-        if (eventData.button == PointerEventData.InputButton.Right)
-        {
-            _rightClick?.Invoke();
-            return;
-        }
-
-        if (eventData.button == PointerEventData.InputButton.Left)
-        {
-            _leftClick?.Invoke();
-        }
-    }
-}
-
-internal sealed class UeiTooltipRelay : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerMoveHandler
-{
-    private string _tipName = string.Empty;
-    private string _tipDesc = string.Empty;
-    private bool _hovering;
-
-    public void Init(string tipName, string tipDesc)
-    {
-        _tipName = tipName ?? string.Empty;
-        _tipDesc = tipDesc ?? string.Empty;
-    }
-
-    public void OnPointerEnter(PointerEventData eventData)
-    {
-        _hovering = true;
-        PushTooltip();
-    }
-
-    public void OnPointerMove(PointerEventData eventData)
-    {
-        if (_hovering)
-        {
-            PushTooltip();
-        }
-    }
-
-    public void OnPointerExit(PointerEventData eventData)
-    {
-        _hovering = false;
-        ClearTooltip();
-    }
-
-    private void OnDisable()
-    {
-        if (_hovering)
-        {
-            _hovering = false;
-            ClearTooltip();
-        }
-    }
-
-    private void PushTooltip()
-    {
-        UeiPanel.SetNativeTooltip(_tipName, _tipDesc);
-    }
-
-    private static void ClearTooltip()
-    {
-        UeiPanel.ClearNativeTooltip();
     }
 }

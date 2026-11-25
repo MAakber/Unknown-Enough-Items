@@ -5,6 +5,7 @@ internal enum UeiEntryKind
 {
     Item,
     Liquid,
+    Entity,
 }
 
 internal enum UeiRecipeRelation
@@ -20,6 +21,9 @@ internal sealed class UeiEntry
     public string EntryKey = string.Empty;
     public string DisplayName = string.Empty;
     public string Description = string.Empty;
+    public string AcquisitionAnnotation = string.Empty;
+    public string AcquisitionSupplement = string.Empty;
+    public string AcquisitionText = string.Empty;
     public string CategoryKey = string.Empty;
     public string CategoryLabel = string.Empty;
     public string SearchText = string.Empty;

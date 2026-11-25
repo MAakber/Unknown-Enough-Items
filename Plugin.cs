@@ -20,7 +20,7 @@ public sealed partial class UeiPlugin : BaseUnityPlugin
     public const string PluginName = "UEI - Unknown Enough Items";
     public const string PluginVersionBase = "1.2";
 #if !UEI_GENERATED_VERSION
-    public const string PluginVersion = PluginVersionBase + ".5";
+    public const string PluginVersion = PluginVersionBase + ".10";
 #endif
     public const string PluginAuthor = "Aakber (小叶子)";
 
@@ -29,6 +29,7 @@ public sealed partial class UeiPlugin : BaseUnityPlugin
     internal static ConfigEntry<string> LanguageMode = null!;
     internal static ConfigEntry<string> PanelPosition = null!;
     internal static ConfigEntry<float> PanelScale = null!;
+    internal static ConfigEntry<int> DetailRowsPerPage = null!;
     internal static ConfigEntry<bool> CheatEnabled = null!;
     private static ConfigFile? ConfigFileRef;
     private static ManualLogSource? LogSourceRef;
@@ -54,6 +55,8 @@ public sealed partial class UeiPlugin : BaseUnityPlugin
             "UEI panel position: left or right.");
         PanelScale = Config.Bind("General", "PanelScale", 1.0f,
             "UEI panel scale multiplier. The in-panel setting cycles 0.85 - 1.30.");
+        DetailRowsPerPage = Config.Bind("General", "DetailRowsPerPage", 2,
+            "Card rows per detail page: 1 - 4 (default 2). Applies to acquisition, crafting and uses; denser pages scale card contents to fit.");
         CheatEnabled = Config.Bind("Cheat", "Enabled", false,
             "When enabled, left-clicking a legal UEI item gives one item to the player's inventory.");
 
@@ -172,6 +175,22 @@ public sealed partial class UeiPlugin : BaseUnityPlugin
         }
 
         CheatEnabled.Value = enabled;
+        ConfigFileRef?.Save();
+    }
+
+    internal static int GetDetailRowsPerPage()
+    {
+        return Mathf.Clamp(DetailRowsPerPage?.Value ?? 2, 1, 4);
+    }
+
+    internal static void SetDetailRowsPerPage(int rows)
+    {
+        if (DetailRowsPerPage == null)
+        {
+            return;
+        }
+
+        DetailRowsPerPage.Value = Mathf.Clamp(rows, 1, 4);
         ConfigFileRef?.Save();
     }
 

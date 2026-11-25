@@ -20,8 +20,18 @@ internal static class Program
             MissingMods();
             LateLoadedMods();
             PermissionsAndRoutes();
+            AcquisitionTests.Run(Check);
+            NativeAcquisitionTests.Run(Check);
+            AcquisitionSupplementTests.Run(Check);
+            ResourceIndexTests.Run(Check, args.Length > 1 ? args[1] : null);
+            NativeAcquisitionDriverTests.Run(Check);
+            InputTests.Run(Check);
+            PerformanceTests.Run(Check);
+            WorldSpawningTests.Run(Check);
+            EntityPlacementTests.Run(Check);
+            EntityGhostTests.Run(Check);
             SourceGuards(args.Length > 0 ? args[0] : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../..")));
-            Console.WriteLine($"PASS: {_checks} assertions (production interop/i18n/policy + source guards; Unity/network runtime not simulated).");
+            Console.WriteLine($"PASS: {_checks} assertions (production interop/i18n/policy/acquisition/input/catalog/interaction + source guards; Unity/network runtime not simulated).");
             return 0;
         }
         catch (Exception ex)
@@ -169,11 +179,31 @@ internal static class Program
         Check(runtime.Contains("UeiRuntime.TickStandalone(\"GlobalDark.Update\")"), "GlobalDark no longer drives recovery");
         Check(runtime.Contains("UeiPlugin.EnsureRuntime(source)"), "Recovery does not recreate runtime");
         Check(runtime.IndexOf("bool shouldShow = ShouldShow(camera, out string hideReason);", StringComparison.Ordinal) < runtime.IndexOf("if (_lastShownFrame == Time.frameCount)", StringComparison.Ordinal), "Visibility must be reevaluated before deduplication");
+        Check(runtime.IndexOf("UeiNativeAcquisition.Tick();", StringComparison.Ordinal) < runtime.IndexOf("bool shouldShow = ShouldShow(camera, out string hideReason);", StringComparison.Ordinal), "Native discovery must continue while inventory is closed");
+        string native = File.ReadAllText(Path.Combine(root, "UeiNativeAcquisition.cs"));
+        Check(!native.Contains("Resources.LoadAll") && !native.Contains("Instantiate("), "Native acquisition must not bulk-load or instantiate gameplay objects");
+        string catalog = File.ReadAllText(Path.Combine(root, "UeiCatalog.cs"));
+        int refresh = catalog.IndexOf("private static void RefreshAcquisition", StringComparison.Ordinal);
+        string sourceRefresh = catalog[refresh..catalog.IndexOf("private static void BuildCategories", refresh, StringComparison.Ordinal)];
+        Check(!sourceRefresh.Contains("BuildRecipeLinks(") && !sourceRefresh.Contains("_revision++"), "Source completion must not rebuild recipes or invalidate the grid/search catalog");
+        Check(sourceRefresh.Contains("out string supplement") && sourceRefresh.Contains("entry.AcquisitionSupplement = supplement;")
+            && sourceRefresh.Contains("string.Equals(entry.AcquisitionSupplement, supplement, StringComparison.Ordinal)"),
+            "Source revisions must cache and compare the supplement returned by acquisition composition");
+        Check(!sourceRefresh.Contains("AcquisitionAnnotation ="), "Supplement filtering must not overwrite the raw acquisition annotation");
         string interop = File.ReadAllText(Path.Combine(root, "UeiModInterop.cs"));
         Check(!interop.Contains(".GetTypes("), "Optional mod discovery enumerates all types");
         Check(!interop.Contains("\"CUCoreLib.Registries.LocaleRegistry\""), "Mutating locale registry is bound");
         Check(!interop.Contains("\"CUCoreLib.Helpers.LocaleLoader\""), "Internal locale loader is bound");
         string panel = File.ReadAllText(Path.Combine(root, "UeiPanel.cs"));
+        int acquisitionRefresh = panel.IndexOf("if (_acquisitionRevision != UeiCatalog.AcquisitionRevision)", StringComparison.Ordinal);
+        string acquisitionBlock = panel[acquisitionRefresh..panel.IndexOf("if (_favoritesRevision", acquisitionRefresh, StringComparison.Ordinal)];
+        Check(acquisitionBlock.Contains("_detailDirty = true;") && !acquisitionBlock.Contains("_dirty = true;"), "New acquisition text must refresh details without rebuilding the grid");
+        Check(panel.Contains("bool hasSupplement = !string.IsNullOrWhiteSpace(_selectedEntry.AcquisitionSupplement);")
+            && panel.Contains("_selectedEntry.AcquisitionSupplement, AcquisitionNotesTextHeight);")
+            && !panel.Contains("_selectedEntry.AcquisitionAnnotation"),
+            "Supplement visibility and content must use the same filtered cache rather than the raw annotation");
+        Check(panel.Contains("if (_sourceSection == SourceSection.Supplement && !hasSupplement) _sourceSection = SourceSection.Acquisition;"),
+            "A supplement removed by a late source update must return the selection to acquisition");
         int click = panel.IndexOf("CheatActionResult result = TryCheatGiveItem(entry);", StringComparison.Ordinal);
         string cheatClick = panel[click..panel.IndexOf("private void SelectEntry", click, StringComparison.Ordinal)];
         Check(cheatClick.Contains("_selectedEntry = null;") && !cheatClick.Contains("SelectEntry("), "Cheat give opens recipe detail");

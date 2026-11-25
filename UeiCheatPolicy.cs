@@ -30,6 +30,13 @@ internal static class UeiCheatPolicy
         };
     }
 
+    internal static UeiGiveRoute WorldRoute(TogetherNetworkState state) => state switch
+    {
+        TogetherNetworkState.NotInstalled or TogetherNetworkState.Offline => UeiGiveRoute.LocalFactory,
+        TogetherNetworkState.Client or TogetherNetworkState.Server => UeiGiveRoute.ServerCommand,
+        _ => UeiGiveRoute.Unavailable,
+    };
+
     internal static UeiGiveRoute GiveRoute(TogetherNetworkState state, bool customItem, bool resourceItem)
     {
         if (!customItem && !resourceItem)

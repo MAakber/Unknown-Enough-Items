@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
+using System.Reflection.Emit;
 using System.Text;
 using HarmonyLib;
 using UnityEngine;
@@ -11,6 +13,8 @@ internal sealed class UeiRuntime : MonoBehaviour
 
     private Canvas? _attachedCanvas;
     private UeiPanel? _panel;
+    private readonly UeiEntityPlacement _placement = new(UeiPanel.TryCheatSpawnEntity, ReportPlacementStatus);
+    private readonly UeiEntityGhost _ghost = new();
     private bool _loggedWaitingForData;
     private bool _loggedRuntimeError;
     private bool _loggedPlayerCameraReady;
@@ -23,17 +27,50 @@ internal sealed class UeiRuntime : MonoBehaviour
     private string _lastTickSource = "none";
     private int _lastShownFrame = -1;
 
-    internal static bool ShouldBlockPlayerCameraInput
+    internal static bool IsEntityPlacementActive => _active?._placement.IsActive ?? false;
+
+    internal static bool BeginEntityPlacement(UeiEntry entry)
+    {
+        if (_active == null) UeiPlugin.EnsureRuntime("entity placement");
+        UeiRuntime? runtime = _active;
+        if (runtime == null || !runtime._placement.TryBegin(GetPlayerCameraSafe(), entry)) return false;
+        runtime._panel?.Hide();
+        runtime._lastShownFrame = -1;
+        return true;
+    }
+
+    internal static void PrepareEntityPlacementInput(PlayerCamera camera)
+    {
+        if (camera == PlayerCamera.main) _active?._placement.Tick(camera);
+    }
+
+    private static void ReportPlacementStatus(string message) => _active?._panel?.SetPlacementStatus(message);
+
+    internal static bool IsTextInputFocused
     {
         get
         {
             try
             {
-                UeiPanel? panel = _active?._panel;
-                return panel != null && (panel.IsTextInputFocused || panel.IsPointerOverPanel);
+                return _active?._panel?.IsTextInputFocused ?? false;
             }
             catch { return false; }
         }
+    }
+
+    internal static bool IsPointerOverPanel
+    {
+        get
+        {
+            try { return _active?._panel?.IsPointerOverPanel ?? false; }
+            catch { return false; }
+        }
+    }
+
+    internal static void ReleaseTextInputFocus()
+    {
+        try { _active?._panel?.ReleaseTextInputFocus(); }
+        catch { }
     }
 
     private void Awake()
@@ -61,22 +98,39 @@ internal sealed class UeiRuntime : MonoBehaviour
 
     private void OnDisable()
     {
+        _placement.Cancel();
+        _ghost.Hide();
+        _panel?.HidePlacementPreview();
         UeiPlugin.LogInfo("UEI runtime OnDisable.");
+    }
+
+    private void OnApplicationFocus(bool focused)
+    {
+        if (focused) return;
+        _placement.Cancel("placement.interrupted");
+        _ghost.Hide();
+        _panel?.HidePlacementPreview();
+        UeiInput.Reset();
     }
 
     private void OnDestroy()
     {
+        bool releaseSharedIcons = _active == this;
+        _placement.Cancel();
+        _ghost.Destroy();
         UeiPlugin.LogInfo("UEI runtime OnDestroy.");
 
         if (_active == this)
         {
             _active = null;
+            UeiInput.Reset();
         }
 
         UeiPlugin.ClearRuntime(this);
         _panel?.Destroy();
         _panel = null;
         _attachedCanvas = null;
+        if (releaseSharedIcons) UeiMissingIcon.Release();
     }
 
     private void Update()
@@ -191,18 +245,28 @@ internal sealed class UeiRuntime : MonoBehaviour
                 UeiPlugin.LogError($"UEI runtime failed via {source}: {ex}");
             }
 
+            _placement.Cancel("placement.interrupted");
+            _ghost.Hide();
+            _panel?.HidePlacementPreview();
             _panel?.Hide();
         }
     }
 
     private void TickSafe(string source, PlayerCamera? cameraOverride)
     {
-        PlayerCamera? camera = cameraOverride ?? GetPlayerCameraSafe();
+        UeiNativeAcquisition.Tick();
+        UeiWorldSpawning.EnsureCommands();
+        // Placement must keep running after inventory/UEI closes, and belongs
+        // to the local player even when another camera invokes a recovery hook.
+        _placement.Tick(GetPlayerCameraSafe());
+        PlayerCamera? camera = _placement.IsActive ? GetPlayerCameraSafe() : cameraOverride ?? GetPlayerCameraSafe();
         if (camera == null || camera.mainCanvas == null || camera.body == null)
         {
             string reason = "waiting for PlayerCamera/mainCanvas/body";
             LogHideReason(reason);
             _lastShownFrame = -1;
+            _ghost.Hide();
+            _panel?.HidePlacementPreview();
             _panel?.Hide();
             return;
         }
@@ -214,6 +278,19 @@ internal sealed class UeiRuntime : MonoBehaviour
         }
 
         EnsurePanel(camera.mainCanvas);
+
+        if (_placement.IsActive)
+        {
+            _lastShownFrame = -1;
+            _panel?.Hide();
+            bool appearance = false;
+            if (_placement.HasPosition) appearance = _ghost.Show(_placement.Entry!.Id, _placement.Position, _placement.CanPlace);
+            else _ghost.Hide();
+            _panel?.ShowPlacementPreview(_placement.Entry!, _placement.CanPlace, appearance);
+            return;
+        }
+        _ghost.Hide();
+        _panel?.HidePlacementPreview();
 
         bool shouldShow = ShouldShow(camera, out string hideReason);
         if (!shouldShow)
@@ -432,14 +509,87 @@ internal sealed class UeiRuntime : MonoBehaviour
 [HarmonyPatch(typeof(PlayerCamera), "HandleInput")]
 internal static class UeiPlayerCameraInputPatch
 {
-    private static bool Prefix()
+    private static readonly MethodInfo NativeGetKey = AccessTools.Method(typeof(Input), nameof(Input.GetKey), new[] { typeof(KeyCode) });
+    private static readonly MethodInfo NativeGetKeyDown = AccessTools.Method(typeof(Input), nameof(Input.GetKeyDown), new[] { typeof(KeyCode) });
+    private static readonly MethodInfo NativeGetKeyUp = AccessTools.Method(typeof(Input), nameof(Input.GetKeyUp), new[] { typeof(KeyCode) });
+    private static readonly MethodInfo RoutedGetKey = AccessTools.Method(typeof(UeiInput), nameof(UeiInput.GetKey));
+    private static readonly MethodInfo RoutedGetKeyDown = AccessTools.Method(typeof(UeiInput), nameof(UeiInput.GetKeyDown));
+    private static readonly MethodInfo RoutedGetKeyUp = AccessTools.Method(typeof(UeiInput), nameof(UeiInput.GetKeyUp));
+
+    private static void Prefix(PlayerCamera __instance)
     {
-        return !UeiRuntime.ShouldBlockPlayerCameraInput;
+        UeiInput.PreparePlayerInput(__instance);
+    }
+
+    private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+    {
+        int replaced = 0;
+        foreach (CodeInstruction instruction in instructions)
+        {
+            MethodInfo? replacement = instruction.operand is MethodInfo method
+                ? Equals(method, NativeGetKey) ? RoutedGetKey
+                : Equals(method, NativeGetKeyDown) ? RoutedGetKeyDown
+                : Equals(method, NativeGetKeyUp) ? RoutedGetKeyUp
+                : null
+                : null;
+            if (replacement != null)
+            {
+                // Mutate the existing instruction so branch labels and exception
+                // blocks stay attached to the same call site.
+                instruction.opcode = OpCodes.Call;
+                instruction.operand = replacement;
+                replaced++;
+            }
+            yield return instruction;
+        }
+
+        if (replaced == 0) throw new InvalidOperationException("UEI could not find PlayerCamera KeyCode input reads to route.");
+        UeiPlugin.LogInfo($"UEI input routing patched: {replaced} key reads.");
     }
 
     private static void Postfix(PlayerCamera __instance)
     {
         UeiRuntime.TickFromPlayerCamera(__instance, "PlayerCamera.HandleInput");
+    }
+}
+
+[HarmonyPatch(typeof(PlayerCamera), "HandleAttacks")]
+internal static class UeiPlayerCameraAttackPatch
+{
+    private static bool Prefix() => !UeiInput.ShouldBlockWorldPointerInput;
+}
+
+[HarmonyPatch(typeof(PlayerCamera), "HandleStartDragging")]
+internal static class UeiPlayerCameraStartDragPatch
+{
+    private static bool Prefix() => !UeiInput.ShouldBlockWorldPointerInput;
+}
+
+[HarmonyPatch(typeof(PlayerCamera), "TryPerformWorldActions")]
+internal static class UeiPlayerCameraWorldActionPatch
+{
+    private static bool Prefix() => !UeiInput.ShouldBlockWorldPointerInput;
+}
+
+[HarmonyPatch(typeof(PlayerCamera), "HandleBlockPlaceGhost")]
+internal static class UeiPlayerCameraPlaceGhostPatch
+{
+    private static bool Prefix(PlayerCamera __instance)
+    {
+        if (!UeiRuntime.IsEntityPlacementActive) return true;
+        if (__instance.placeSquare != null) __instance.placeSquare.enabled = false;
+        return false;
+    }
+}
+
+[HarmonyPatch(typeof(PlayerCamera), "HandleReleaseDragging")]
+internal static class UeiPlayerCameraReleaseDragPatch
+{
+    private static bool Prefix(PlayerCamera __instance)
+    {
+        if (!UeiInput.ShouldBlockWorldPointerInput) return true;
+        UeiInput.CancelWorldDrag(__instance);
+        return false;
     }
 }
 
@@ -520,4 +670,13 @@ internal sealed class UeiProbeListener : MonoBehaviour
             UeiPlugin.LogInfo("UEI probe OnGUI active; visual debug overlay disabled.");
         }
     }
+}
+
+
+// Natural generation supplies a range before Start; native console spawning
+// leaves the prefab's zero range. Initialize it before Together publishes it.
+[HarmonyPatch(typeof(TraderScript), "Start")]
+internal static class UeiTraderSpawnInitializationPatch
+{
+    private static void Prefix(TraderScript __instance) => UeiWorldSpawning.InitializeTrader(__instance);
 }

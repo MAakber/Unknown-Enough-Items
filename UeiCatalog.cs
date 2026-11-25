@@ -4,72 +4,12 @@ using System.Linq;
 using System.Text;
 using UnityEngine;
 
-internal static class UeiFavorites
-{
-    private static readonly HashSet<string> Favorites = new(StringComparer.OrdinalIgnoreCase);
-
-    public static void Load(string serialized)
-    {
-        Favorites.Clear();
-        if (string.IsNullOrWhiteSpace(serialized))
-        {
-            return;
-        }
-
-        foreach (string raw in serialized.Split('|'))
-        {
-            string key = raw.Trim();
-            if (!string.IsNullOrEmpty(key))
-            {
-                Favorites.Add(key);
-            }
-        }
-    }
-
-    public static bool Contains(string entryKey)
-    {
-        return Favorites.Contains(entryKey);
-    }
-
-    public static int Count => Favorites.Count;
-
-    public static void Toggle(string entryKey)
-    {
-        if (string.IsNullOrWhiteSpace(entryKey))
-        {
-            return;
-        }
-
-        if (!Favorites.Remove(entryKey))
-        {
-            Favorites.Add(entryKey);
-        }
-
-        UeiPlugin.SaveFavorites();
-    }
-
-    public static void ClearAll()
-    {
-        if (Favorites.Count == 0)
-        {
-            return;
-        }
-
-        Favorites.Clear();
-        UeiPlugin.SaveFavorites();
-    }
-
-    public static string Serialize()
-    {
-        return string.Join("|", Favorites.OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
-    }
-}
-
 internal static class UeiCatalog
 {
     public const string CategoryAll = "All";
     public const string CategoryFavorites = "Favorites";
     public const string CategoryLiquid = "Liquid";
+    public const string CategoryEntity = "Entity";
 
     private static readonly List<UeiEntry> EntriesBacking = new();
     private static readonly List<string> CategoryKeysBacking = new();
@@ -85,11 +25,17 @@ internal static class UeiCatalog
     private static int _specialKnownCount = -1;
     private static string _localeName = string.Empty;
     private static int _revision;
+    private static int _acquisitionRevision;
+    private static int _nativeAcquisitionRevision = -1;
+    private static int _registryRevision = -1;
+    private static int _entityRevision = -1;
+    private static string _sourceLanguageMode = string.Empty;
     private static float _lastRecipeFlagCheck = -999f;
 
     public static IReadOnlyList<UeiEntry> Entries => EntriesBacking;
     public static IReadOnlyList<string> CategoryKeys => CategoryKeysBacking;
     public static int Revision => _revision;
+    public static int AcquisitionRevision => _acquisitionRevision;
 
     public static void ForceRebuild()
     {
@@ -101,6 +47,8 @@ internal static class UeiCatalog
         _specialKnownCount = -1;
         _localeName = string.Empty;
         _lastRecipeFlagCheck = -999f;
+        _nativeAcquisitionRevision = -1;
+        _entityRevision = -1;
         _revision++;
     }
 
@@ -117,6 +65,7 @@ internal static class UeiCatalog
         int playerInt = PlayerCamera.main.body.skills.INT;
         string localeName = SafeString(() => Locale.currentLangName, string.Empty);
         bool countsUnchanged = itemCount == _itemCount
+            && UeiNativeAcquisition.RegistryRevision == _registryRevision
             && liquidCount == _liquidCount
             && recipeCount == _recipeCount
             && playerInt == _playerInt
@@ -124,6 +73,8 @@ internal static class UeiCatalog
             && EntriesBacking.Count > 0;
         if (countsUnchanged && Time.unscaledTime - _lastRecipeFlagCheck < 1f)
         {
+            RefreshEntities();
+            RefreshAcquisition();
             return true;
         }
 
@@ -139,6 +90,8 @@ internal static class UeiCatalog
             && madeRecipeCount == _madeRecipeCount
             && specialKnownCount == _specialKnownCount)
         {
+            RefreshEntities();
+            RefreshAcquisition();
             return true;
         }
 
@@ -148,7 +101,13 @@ internal static class UeiCatalog
 
     public static string EntryKey(UeiEntryKind kind, string id)
     {
-        return (kind == UeiEntryKind.Item ? "item:" : "liquid:") + id;
+        return (kind switch
+        {
+            UeiEntryKind.Item => "item:",
+            UeiEntryKind.Liquid => "liquid:",
+            UeiEntryKind.Entity => "entity:",
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        }) + id;
     }
 
     public static bool TryGetEntry(UeiEntryKind kind, string id, out UeiEntry? entry)
@@ -234,8 +193,10 @@ internal static class UeiCatalog
             EntriesByKey[entry.EntryKey] = entry;
         }
 
+        AddEntityEntries();
         BuildCategories();
         BuildRecipeLinks();
+        RefreshAcquisition(force: true);
 
         _itemCount = itemCount;
         _liquidCount = liquidCount;
@@ -244,6 +205,7 @@ internal static class UeiCatalog
         _madeRecipeCount = madeRecipeCount;
         _specialKnownCount = specialKnownCount;
         _localeName = localeName;
+        _registryRevision = UeiNativeAcquisition.RegistryRevision;
         _revision++;
         UeiPlugin.LogInfo($"UEI catalog built: {EntriesBacking.Count} entries, {Recipes.recipes.Count} recipes.");
     }
@@ -274,6 +236,7 @@ internal static class UeiCatalog
             EntryKey = EntryKey(UeiEntryKind.Item, id),
             DisplayName = name,
             Description = desc,
+            AcquisitionAnnotation = UeiAcquisition.Extract(desc),
             CategoryKey = category,
             CategoryLabel = CategoryLabel(category),
             Icon = SafeLoadItemSprite(id),
@@ -296,13 +259,15 @@ internal static class UeiCatalog
             name = UeiI18n.LiquidText(localeName, localeName);
         }
 
+        string desc = UeiI18n.LiquidText(id + "dsc", string.Empty);
         UeiEntry entry = new()
         {
             Kind = UeiEntryKind.Liquid,
             Id = id,
             EntryKey = EntryKey(UeiEntryKind.Liquid, id),
             DisplayName = name,
-            Description = UeiI18n.LiquidText(id + "dsc", string.Empty),
+            Description = desc,
+            AcquisitionAnnotation = UeiAcquisition.Extract(desc),
             CategoryKey = CategoryLiquid,
             CategoryLabel = CategoryLabel(CategoryLiquid),
             Icon = droplet,
@@ -327,6 +292,57 @@ internal static class UeiCatalog
         return entry;
     }
 
+    private static void AddEntityEntries()
+    {
+        foreach (UeiEntities.Descriptor descriptor in UeiEntities.Entries)
+        {
+            UeiEntry entry = UeiEntities.BuildEntry(descriptor);
+            EntriesBacking.Add(entry);
+            EntriesByKey[entry.EntryKey] = entry;
+        }
+        _entityRevision = UeiEntities.Revision;
+    }
+
+    private static void RefreshEntities()
+    {
+        if (_entityRevision == UeiEntities.Revision) return;
+        for (int i = EntriesBacking.Count - 1; i >= 0; i--)
+        {
+            UeiEntry entry = EntriesBacking[i];
+            if (entry.Kind != UeiEntryKind.Entity) continue;
+            EntriesByKey.Remove(entry.EntryKey);
+            EntriesBacking.RemoveAt(i);
+        }
+        AddEntityEntries();
+        BuildCategories();
+        _revision++;
+    }
+
+    private static void RefreshAcquisition(bool force = false)
+    {
+        string languageMode = SafeString(() => UeiPlugin.LanguageMode.Value, "auto");
+        int nativeRevision = UeiNativeAcquisition.Revision;
+        if (!force && _nativeAcquisitionRevision == nativeRevision
+            && string.Equals(languageMode, _sourceLanguageMode, StringComparison.OrdinalIgnoreCase)) return;
+        bool changed = false;
+        foreach (UeiEntry entry in EntriesBacking)
+        {
+            if (entry.Kind == UeiEntryKind.Entity) continue;
+            string text = UeiAcquisitionText.Compose(UeiNativeAcquisition.Index, entry.Kind, entry.Id,
+                entry.AcquisitionAnnotation, UeiNativeAcquisition.State, out string supplement);
+            if (string.Equals(entry.AcquisitionText, text, StringComparison.Ordinal)
+                && string.Equals(entry.AcquisitionSupplement, supplement, StringComparison.Ordinal)) continue;
+            entry.AcquisitionText = text;
+            entry.AcquisitionSupplement = supplement;
+            changed = true;
+        }
+        _nativeAcquisitionRevision = nativeRevision;
+        _sourceLanguageMode = languageMode;
+        // Source completion must not rebuild recipe links, sort the grid, or
+        // discard the search cache. The panel refreshes its detail card only.
+        if (changed) _acquisitionRevision++;
+    }
+
     private static void BuildCategories()
     {
         CategoryKeysBacking.Clear();
@@ -344,6 +360,7 @@ internal static class UeiCatalog
         }
 
         CategoryKeysBacking.Add(CategoryLiquid);
+        CategoryKeysBacking.Add(CategoryEntity);
     }
 
     private static void BuildRecipeLinks()
@@ -403,6 +420,7 @@ internal static class UeiCatalog
 
     private static bool RecipeItemUsesEntry(RecipeItem item, UeiEntry entry)
     {
+        if (entry.Kind == UeiEntryKind.Entity) return false;
         bool wantsLiquid = item.isLiquid;
         if (wantsLiquid != (entry.Kind == UeiEntryKind.Liquid))
         {
@@ -539,13 +557,13 @@ internal static class UeiCatalog
 
         try
         {
-            GameObject prefab = Resources.Load<GameObject>(id);
+            GameObject? prefab = Resources.Load<GameObject>(id);
             if (prefab == null)
             {
                 return null;
             }
 
-            SpriteRenderer renderer = prefab.GetComponent<SpriteRenderer>();
+            SpriteRenderer? renderer = prefab.GetComponent<SpriteRenderer>();
             return renderer != null ? renderer.sprite : null;
         }
         catch

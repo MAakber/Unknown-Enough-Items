@@ -9,8 +9,25 @@
   <ItemGroup>
     <Compile Remove="UnityStubs/**/*.cs;OptionalMods/**/*.cs" />
     <Compile Include="../UeiModInterop.cs" Link="Production/UeiModInterop.cs" />
+    <Compile Include="../UeiModels.cs" Link="Production/UeiModels.cs" />
+    <Compile Include="../UeiCatalog.cs" Link="Production/UeiCatalog.cs" />
+    <Compile Include="../UeiEntities.cs" Link="Production/UeiEntities.cs" />
+    <Compile Include="../UeiEntityVisuals.cs" Link="Production/UeiEntityVisuals.cs" />
+    <Compile Include="../UeiEntityGhost.cs" Link="Production/UeiEntityGhost.cs" />
+    <Compile Include="../UeiEntityPlacement.cs" Link="Production/UeiEntityPlacement.cs" />
+    <Compile Include="../UeiWorldSpawning.cs" Link="Production/UeiWorldSpawning.cs" />
     <Compile Include="../UeiCheatPolicy.cs" Link="Production/UeiCheatPolicy.cs" />
     <Compile Include="../UeiI18n.cs" Link="Production/UeiI18n.cs" />
+    <Compile Include="../UeiAcquisition.cs" Link="Production/UeiAcquisition.cs" />
+    <Compile Include="../UeiAcquisitionIndex.cs" Link="Production/UeiAcquisitionIndex.cs" />
+    <Compile Include="../UeiAcquisitionSupplement.cs" Link="Production/UeiAcquisitionSupplement.cs" />
+    <Compile Include="../UeiAcquisitionCards.cs" Link="Production/UeiAcquisitionCards.cs" />
+    <Compile Include="../UeiResourceIndex.cs" Link="Production/UeiResourceIndex.cs" />
+    <Compile Include="../UeiNativeAcquisition.cs" Link="Production/UeiNativeAcquisition.cs" />
+    <Compile Include="../UeiInput.cs" Link="Production/UeiInput.cs" />
+    <Compile Include="../UeiFavorites.cs" Link="Production/UeiFavorites.cs" />
+    <Compile Include="../UeiCatalogView.cs" Link="Production/UeiCatalogView.cs" />
+    <Compile Include="../UeiEntryInteraction.cs" Link="Production/UeiEntryInteraction.cs" />
     <ProjectReference Include="UnityStubs/UnityStubs.csproj" />
     <ProjectReference Include="OptionalMods/OptionalMods.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>

@@ -1,251 +1,215 @@
 <div align="center">
 
-<img src="packaging/icon-D-1024.png" width="192" height="192" alt="UEI — cave glow icon">
+<img src="packaging/icon-D-1024.png" width="192" height="192" alt="UEI 图标">
 
 # UEI - Unknown Enough Items
 
-**A JEI-style item, liquid, and recipe helper for `Casualties: Unknown`.**
-**一个用于 `Casualties: Unknown` 的 JEI 风格物品、液体与配方查询辅助插件。**
+**《Casualties: Unknown》的物品、液体与配方查询插件**
 
-![Version](https://img.shields.io/badge/version-1.2.5-blue)
-![BepInEx](https://img.shields.io/badge/BepInEx-plugin-f6c343)
-![Game](https://img.shields.io/badge/game-Casualties%3A%20Unknown-2f2f2f)
-![UI](https://img.shields.io/badge/UI-%E4%B8%AD%E6%96%87%20%7C%20English-orange)
-![License](https://img.shields.io/badge/license-MIT-green)
+[![Release](https://img.shields.io/github/v/release/MAakber/Unknown-Enough-Items)](https://github.com/MAakber/Unknown-Enough-Items/releases)
+[![Thunderstore](https://img.shields.io/badge/Thunderstore-UEI-23a8e0)](https://thunderstore.io/c/casualties-unknown/p/MAakber/UEI/)
+![BepInEx 5](https://img.shields.io/badge/BepInEx-5-f6c343)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+**简体中文** · [English](README.en.md)
 
 </div>
 
-`1.2.5` 更新图标、安装说明和自动打包的更新日志，沿用 `1.2.4` 的功能与联机限制。
-Version `1.2.5` updates the icon, installation documentation and packaged changelog.
-Gameplay behavior and multiplayer limitations remain those of `1.2.4`.
+UEI（Unknown Enough Items）的灵感来自 Minecraft 的 JEI。打开原版物品栏时，它会在旁边显示一个查询面板：搜索任意物品或液体，查看它从哪里获得、怎么制作、能拿来做什么，再顺着配方链一路查下去。UEI 不会替换或改动原版的制作系统。
 
-> [!WARNING]
-> UEI is an early WIP mod. Its original test baseline was `Casualties Unknown Demo v6.1`. The current full-game/CUCoreLib integration is a test candidate; see the linked validation records before treating it as a verified release.
->
-> UEI 目前仍是早期开发版本，原始测试基线为 `Casualties Unknown Demo v6.1`。当前正式版 / CUCoreLib 整合为待实测候选，已验证范围与限制见下方记录。
+![UEI 面板显示在原版物品栏左侧](image/README/1779439656940.png)
 
-`1.2.4` 本地整合保留 RshLib / SexMod，并优先使用 CUCoreLib 的公开接口读取物品、图标、联机角色和生成物品。
-Together 客户端的原版物品请求由服务器处理；模组物品需由房主生成，客户端会显示限制提示。
-“已请求”仅表示提交了命令，不代表服务器已成功执行。`cuspawn` 尚未启用为自动后备，需单独验证权限、作弊规则与同步行为。
-审查依据、贡献归属、验证范围见 [PR #3 / #4 整合记录](docs/pr-3-4-integration.md)。
-CUCoreLib 专项验证见 [公开接口与测试计划](docs/cucore-public-api-test-plan.md)；测试插件位于仓库之外，不随 UEI 发布。
+> [!NOTE]
+> UEI 仍处于早期开发阶段。1.2.4 起适配游戏正式版，并在该版本完成了本地运行检查；之后新增的获取途径卡片、实体生成和液体领取等功能仍待游戏内验收，联机相关功能也尚未完整实测，详见[兼容性与已知限制](#兼容性与已知限制)。
 
-## 目录 / Contents
+[功能](#功能) · [安装](#安装) · [使用](#使用) · [配置](#配置) · [兼容性与已知限制](#兼容性与已知限制) · [从源码编译](#从源码编译) · [开发记录](#开发记录) · [作者与许可证](#作者与许可证)
 
-- [简介 / Overview](#简介--overview)
-- [功能 / Features](#功能--features)
-- [安装 / Install](#安装--install)
-- [编译方法 / Compile Method](#编译方法--compile-method)
-- [配置 / Configuration](#配置--configuration)
-- [使用说明 / Usage](#使用说明--usage)
-- [作者 / Author](#作者--author)
-- [许可证 / License](#许可证--license)
+## 功能
 
-## 简介 / Overview
+- **浏览**：列出游戏运行时加载的全部物品和液体，包括受支持模组添加的条目。数据直接读取自游戏，不内置物品表，会随游戏版本和已安装的模组变化。
+- **查找**：按名称搜索、按分类筛选；收藏的条目排在最前面。
+- **来源与用途**：左键物品或液体查看获取途径和制作配方，右键查看它能用在哪些配方里。
+- **配方链**：点击配方里的材料或产物继续查询；鼠标悬停在泛材料（例如“任意可撕碎物品”）上，可以查看符合条件的候选物品或液体，候选较多时只显示前 18 个并注明剩余数量。
+- **联动原版**：一键打开原版制作面板并定位到当前配方，也可以直接收藏这条配方。
+- **原生风格**：鼠标悬停条目时，显示与游戏一致的物品提示框。
+- **可调整**：界面语言（中文 / English）、面板位置、大小和每页卡片行数都能在设置里修改。
+- **实体**：商人、生物和场景物件有独立分类，也能在「全部」中搜索和收藏；点击可查看原文描述。
+- **作弊功能（可选）**：领取物品和液体、生成实体、一键复活。默认关闭，并受游戏和服务器权限限制。
 
-UEI, short for **Unknown Enough Items**, is a BepInEx plugin inspired by Minecraft JEI. It adds an in-game helper panel beside the original inventory/radial backpack UI, letting you browse items, liquids, and recipe relationships without replacing the game's native crafting system.
+> **关于获取途径：** UEI 从游戏当前的可破坏实体、掉落池、商人规则和液体容器内容推导来源，无需中文翻译补丁或联网。描述里的“获取：”等标注保留为补充；随机来源会注明抽取与概率条件。
 
-UEI 是 **Unknown Enough Items** 的缩写，设计灵感来自 Minecraft JEI。它会在原版物品栏 / 径向背包界面旁显示一个辅助面板，用于查询物品、液体和配方关系，但不会替代原版制作系统。
+同一来源对象的独立与嵌套形态，在掉落规则完全相同时合并为一张卡片；悬浮说明保留各来源，概率和产物数量不会相加。规则不同或信息不完整的来源继续分开显示。
 
-The mod reads runtime game data directly from:
+### 截图
 
-本插件直接读取游戏运行时数据：
+以下截图拍摄于早期 Demo 版本，与当前界面可能略有差异。
 
-- `Item.GlobalItems`
-- `Liquids.Registry`
-- `Recipes.recipes`
+| 内容 | 截图 |
+| --- | --- |
+| 列出全部运行时物品和液体 | ![物品列表](image/README/1779439722660.png) |
+| 搜索、分类筛选与收藏置顶 | ![搜索与筛选](image/README/1779439878022.png) |
+| 悬停显示游戏原生风格的提示框 | ![物品提示框](image/README/1779439913966.png) |
+| 来源页（左键）与用途页（右键） | ![来源页与用途页](image/README/1779440030782.png) |
+| 悬停泛材料，查看符合条件的候选物品 | ![泛材料候选列表](image/README/1779440090021.png) |
+| 联机时按权限决定作弊开关是否可用（左：客户端无权限；右：房主已允许作弊） | ![联机权限](image/README/1779439469003.png) |
 
-Release packages do not bundle game assets, game assemblies, BepInEx, Harmony,
-Unity assemblies, or TextMeshPro assemblies. CI uses encrypted compile-time
-references as described in the [automation guide](docs/github-automation.md).
+## 安装
 
-发布安装包不包含游戏资源、游戏程序集、BepInEx、Harmony、Unity 程序集或 TextMeshPro 程序集。
-仓库中的 CI 编译引用经过加密，仅用于构建；来源和管理方式见自动化说明。
+### 通过 Gale 安装（推荐）
 
-## 功能 / Features
+在 Gale 中选择 Casualties: Unknown，搜索 **UEI** 并安装，必需的 BepInEx 会自动一起安装。也可以从 [Thunderstore 页面](https://thunderstore.io/c/casualties-unknown/p/MAakber/UEI/)下载 ZIP，再导入 Gale。
 
-| 功能                                  | Feature                                                                 |                                                |
-| ------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------- |
-| 在原版右键背包界面旁显示 UEI 面板。   | Shows the UEI panel beside the native right-click inventory UI.         | ![1779439656940](image/README/1779439656940.png) |
-| 列出全部运行时物品和液体。            | Lists all runtime items and liquids.                                    | ![1779439722660](image/README/1779439722660.png) |
-| 支持搜索、分类筛选和收藏置顶。        | Supports search, category filtering, and favorite pinning.              | ![1779439878022](image/README/1779439878022.png) |
-| 鼠标悬停复用游戏原生 tooltip 风格。   | Reuses the game's native tooltip style on hover.                        | ![1779439913966](image/README/1779439913966.png) |
-| 左键查看来源配方，右键查看用途配方。  | Left-click opens source recipes, right-click opens usage recipes.       | ![1779440030782](image/README/1779440030782.png) |
-| 配方材料和结果可点击跳转。            | Recipe ingredients and results can jump to related UEI entries.         | -                                              |
-| 泛材料会显示可用物品 / 液体候选列表。 | Generic ingredients show matching item/liquid candidates.               | ![1779440090021](image/README/1779440090021.png) |
-| 可跳转到原版制作面板并选中对应配方。  | Can jump to the original crafting panel and select the matching recipe. | -                                              |
-| 支持联机权限判断与物品请求策略。       | Supports multiplayer permission checks and item requests.              | ![早期联机界面](image/README/1779439469003.png) |
-| 支持中文和 English。                  | Supports Chinese and English.                                           | -                                              |
+### 手动安装
 
-截图来自早期 Demo，用于展示查询界面。当前正式版与 Together 的验证范围见上方兼容记录。
-Screenshots show the earlier demo UI. See the linked records for current full-game and Together validation.
-
-## 安装 / Install
-
-Install UEI from the Casualties: Unknown mod list in Gale. The required BepInEx
-dependency is installed by the manager. The [Thunderstore page](https://thunderstore.io/c/casualties-unknown/p/MAakber/UEI/)
-also offers an installation link and ZIP download.
-
-For manual installation:
-
-1. Install BepInEx 5 for `Casualties: Unknown`.
-2. Download the ZIP or DLL from [GitHub Releases](https://github.com/MAakber/Unknown-Enough-Items/releases)
-   and place the release DLL at:
-
-```text
-BepInEx/plugins/UEI/UEI.dll
-```
-
-3. Launch the game.
-4. Open the native inventory/radial backpack UI. UEI appears beside it when the UI state is supported.
-
-Gale 用户在 Casualties: Unknown 模组列表搜索并安装 UEI，管理器会处理 BepInEx 依赖。
-也可从上方 Thunderstore 页面下载 ZIP 并导入。手动安装步骤：
-
-1. 先为 `Casualties: Unknown` 安装 BepInEx 5。
-2. 从 GitHub Releases 下载 ZIP 或 DLL，将发布 DLL 放到：
-
-```text
-BepInEx/plugins/UEI/UEI.dll
-```
-
+1. 为游戏安装 BepInEx 5。
+2. 从 [GitHub Releases](https://github.com/MAakber/Unknown-Enough-Items/releases) 下载 `UEI-x.y.z.zip`，把其中的 `BepInEx` 文件夹合并到游戏目录。也可以只下载 `UEI.dll`，放到 `BepInEx/plugins/UEI/UEI.dll`。
 3. 启动游戏。
-4. 打开原版物品栏 / 径向背包界面；当界面状态支持时，UEI 会显示在旁边。
 
-升级前请关闭游戏，并只保留一份 UEI DLL；本地编译生成的 `UEI.build.dll`
-与发布包里的 `UEI.dll` 是同一插件，不应同时安装。
+### 升级
 
-Close the game before updating and keep only one UEI DLL. The locally built
-`UEI.build.dll` and released `UEI.dll` are the same plugin; install one copy.
+升级前请先关闭游戏（游戏运行时 Windows 会锁定 DLL），并确认插件目录里只有一份 UEI。本地编译生成的 `UEI.build.dll` 与发布版的 `UEI.dll` 是同一个插件，不要同时安装。
 
-## 编译方法 / Compile Method
+## 使用
 
-GitHub Actions 自动运行回归检查，并为本仓库提交生成可下载的编译包。
-维护者推送与源码版本一致的 `vX.Y.Z` 标签后，会自动构建并发布 GitHub Release。
-发布规则、构建引用与维护方法见 [GitHub 自动化说明](docs/github-automation.md)。
+### 打开与查找
 
-GitHub Actions checks pull requests, builds trusted repository commits, and
-publishes releases for matching version tags. See the automation guide above.
+1. 进入游戏，打开原版的右键物品栏（径向背包），UEI 面板会出现在旁边。打开制作、交易、医疗面板或控制台时，面板会自动隐藏。
+2. 用搜索框和分类箭头（`全部`、`收藏`、各物品分类、`液体`、`实体`）查找条目，点击条目上的星标即可收藏。
 
-Regular players should use the published release ZIP or DLL.
+### 查看详情
 
-普通玩家可以直接下载 Release 页面中的 ZIP 或 DLL，不需要自己编译。
+下表是普通浏览（作弊关闭）时的点击效果；开启作弊后，左键改为领取或生成，见[作弊模式](#作弊模式)。
 
-If you need to compile from source manually, prepare:
+| 条目 | 左键 | 右键 |
+| --- | --- | --- |
+| 物品、液体 | 来源页 | 用途页 |
+| 实体 | 实体描述 | 实体描述 |
 
-如果需要从源码手动编译，请准备：
+- **来源页**：用上方按钮在「获取途径」和「制作配方」之间切换；描述里带有获取标注时，还会出现「描述补充」，长说明可在其中滚动阅读。获取途径和制作配方都用图标卡片显示，默认每页 2 行，可在设置中改为 1–4 行。液体卡片显示来源、容器和液体的关系，点击容器可以继续查询。
+- **用途页**：列出所有用到该条目的配方。详情页左上角的「源 / 用」按钮可以在来源页和用途页之间切换。
+- **实体描述**：直接渲染原文的富文本，保留颜色、字号、换行和图标，不拆分或改写内容；说明区按内容高度使用详情面板的剩余空间，较长时可以滚动查看。实体目录会随首次资源扫描逐步补齐。
+- **缺图标识**：没有可用图标的条目显示黑紫棋盘格，用来区分“缺图”和物体本身的外观；空格子不显示占位图。实体会优先复用已有的可见贴图。部分实体由线条等方式绘制，例如抓缠草没有静态图标，它显示缺图标识并不代表无法生成。
 
-- A local `Casualties Unknown Demo` game folder with BepInEx installed.
-- .NET SDK.
-- This repository's source code.
+### 配方操作与翻页
 
-Release builds use the version declared in `Plugin.cs`/`UEI.csproj`. Update those files before creating a new release build.
+- 点击配方里的材料或产物，可以继续查看它的配方。
+- 详情页里的跳转按钮会打开原版制作面板并定位到当前配方；配方卡片上的 `*` 按钮可以收藏或取消收藏这条配方。
+- 翻页：点击面板上的箭头，或把鼠标放在列表或配方上，滚动滚轮、按 PageUp / PageDown。
 
-Release 构建会使用 `Plugin.cs`/`UEI.csproj` 中声明的版本号。创建新版本前请先更新这些文件。
+### 设置
 
-Recommended layout:
+点击搜索框旁的齿轮打开设置，可以调整语言、面板位置、比例、每页卡片行数和作弊开关。点击行数按钮会在 1–4 行之间循环切换，获取途径、制作配方和用途共用这一设置；行数较多时，卡片内容会等比缩小以适应面板。行数选择会自动保存。
 
-推荐目录结构：
+### 作弊模式
+
+作弊默认关闭，需要在设置中手动开启，并且只在有权限时可用：
+
+| 场景 | 条件 |
+| --- | --- |
+| 单机，或未安装 Together | 可直接开启 |
+| Together 房主 | 需要开启 `sv_cheats` |
+| Together 客户端 | 需要服务器授予的管理员命令权限；服务器执行请求时仍会检查 `sv_cheats` |
+
+客户端能打开作弊开关，不代表每次请求都会成功：领取和生成都由服务器执行，结果以游戏内实际到账为准。
+
+开启后，右键仍然打开详情，左键按条目类型执行操作：
+
+| 条目 | 左键效果 |
+| --- | --- |
+| 物品 | 领取 1 个 |
+| 液体 | 领取一个装满该液体的原生临时瓶（默认 1000 mL，5 分钟后消失）；背包放不下时留在脚边 |
+| 实体 | 进入定位：背包自动收起，移动鼠标选择落点，再次左键通过游戏原生 `spawn` 在该位置生成 1 个 |
+
+定位时：
+
+- 落点处显示半透明预览，按实体的实际尺寸、原点、朝向和可见贴图层绘制。预览只是本地画面，确认前不会创建可交互实体。
+- 预览只使用静态 Sprite，不包含动画、线条等其他渲染方式。抓缠草这类没有可用预览的实体只显示文字提示“暂无可预览外观”，仍然可以正常生成。
+- 右键或 Esc 取消；按背包键会取消并打开背包。生成一次后恢复普通操作，再次打开 UEI 时保留原来的分类、搜索和页码。
+
+这些操作都沿用现有条目，不需要额外的按钮或设置。搜索框旁还会出现一键复活按钮，可回满并复活角色。
+
+## 配置
+
+配置文件位于 `BepInEx/config/casualtiesunknown.uei.cfg`。语言、位置、比例、每页卡片行数和作弊开关也可以在游戏内的设置里修改。
+
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `General/Language` | `auto` | 界面语言：`auto`（跟随游戏语言，无法识别时跟随系统语言）、`zh` 或 `en` |
+| `General/PanelPosition` | `left` | 面板位置：`left` 或 `right` |
+| `General/PanelScale` | `1.0` | 面板比例，游戏内可在 85%–130% 之间调整 |
+| `General/DetailRowsPerPage` | `2` | 获取途径、制作配方和用途每页 1–4 行；卡片内容按可用高度等比缩小 |
+| `Favorites/FavoriteEntries` | 空 | 收藏的条目，格式为 `item:<id>`、`liquid:<id>` 或 `entity:<资源路径>`，多个条目用 `\|` 分隔 |
+| `Cheat/Enabled` | `false` | 作弊开关 |
+
+## 兼容性与已知限制
+
+- UEI 最初基于 Casualties Unknown Demo v6.1 开发，1.2.4 起适配游戏正式版。
+- Together（联机）、CUCoreLib、RshLib、SexMod 都是可选适配，不安装也能正常使用；安装后，UEI 会显示这些模组添加的物品，并按联机身份判断权限。
+- Together 联机时：
+  - 客户端领取物品、液体或生成实体，都会以服务器命令提交，由服务器执行。提示“已请求服务器发放”或“已请求服务器生成”只代表命令已发出，不代表服务器已执行成功。
+  - 液体领取依赖房主端的 UEI，房主也需要安装同一版本的 UEI。
+  - 客户端无法领取模组物品，需要由房主生成。
+  - 双端同步、存档与重连尚未完整实测。
+- 获取途径优先使用当前游戏的实体掉落字段、实际掉落池、商人随机库存规则和容器默认液体内容；官方英文文本也能显示这些来源。描述中的“获取：”、`Acquisition:`、`Obtained from:` 等内容标为“描述补充”，保留特殊条件。
+- 首次读取预制件分批进行，已列出的来源可能继续补充；搜索、翻页、语言和配方变化会复用来源缓存。读取失败会提示信息可能不完整，“暂无获取信息”表示当前没有已知来源，不代表物品无法获得。
+- 尚未覆盖全部地形生成、脚本事件及模组自定义来源；制作配方继续单独显示，中文描述可补充这些特殊途径。
+- 发布包只包含 UEI 本身，不含游戏文件、BepInEx、Harmony、Unity / TextMeshPro 程序集或其他模组。
+
+## 从源码编译
+
+普通玩家直接安装发布版即可，不需要自己编译。
+
+### 自动构建
+
+GitHub Actions 会检查拉取请求，并为本仓库的提交生成构建包；维护者推送与源码版本一致的 `vX.Y.Z` 标签后，会自动构建并发布 Release。CI 使用加密的编译引用，仓库中不含明文的游戏程序集。详见 [GitHub 自动编译与发布](docs/github-automation.md)。
+
+### 手动编译
+
+需要准备：已安装 BepInEx 的游戏目录、.NET SDK（CI 使用 .NET 10），以及本仓库源码。
+
+推荐把源码放在游戏目录的 `Tools/UEI` 下：
 
 ```text
-Casualties Unknown Demo/
+<游戏目录>/
 ├─ BepInEx/
 ├─ CasualtiesUnknown_Data/
 └─ Tools/
-   └─ UEI/
-      ├─ UEI.csproj
-      └─ *.cs
+   └─ UEI/    ← 本仓库
 ```
 
-Compile from `Tools/UEI`:
-
-在 `Tools/UEI` 中编译：
+在 `Tools/UEI` 中运行：
 
 ```powershell
-cd "D:\SteamLibrary\steamapps\common\Casualties Unknown Demo\Tools\UEI"
 dotnet build UEI.csproj -c Release
 ```
 
-The project file references assemblies from the local game folder and writes the plugin DLL to:
-
-项目文件会引用本地游戏目录中的程序集，并把插件 DLL 输出到：
-
-```text
-BepInEx/plugins/UEI/UEI.build.dll
-```
-
-If the source folder is not placed under `GameRoot/Tools/UEI`, pass the game directory explicitly:
-
-如果源码没有放在 `游戏目录/Tools/UEI` 下，请显式传入游戏目录：
+源码放在其他位置时，用 `GameRoot` 指定游戏目录：
 
 ```powershell
-dotnet build UEI.csproj -c Release /p:GameRoot="D:\SteamLibrary\steamapps\common\Casualties Unknown Demo"
+dotnet build UEI.csproj -c Release /p:GameRoot="<游戏目录>"
 ```
 
-The expected runtime file is:
+编译结果会直接输出到游戏的 `BepInEx/plugins/UEI/UEI.build.dll`。游戏运行时该文件会被锁定，请先关闭游戏。
 
-```text
-BepInEx/plugins/UEI/UEI.build.dll
-```
+发布新版本前，先把 `UEI.csproj` 和 `Plugin.cs` 中的版本号改成一致的 `x.y.z`，并更新 `packaging/RELEASE-NOTES.md` 顶部的版本标记。回归测试的运行方法见 [tests/README.md](tests/README.md)。
 
-If the game is running, Windows may lock the deployed DLL. Close the game before replacing it.
+## 开发记录
 
-如果游戏正在运行，Windows 可能会锁定已部署的 DLL。请关闭游戏后再替换文件。
+各版本的设计说明与验证范围：
 
-## 配置 / Configuration
+- [输入与性能修复](docs/input-performance-fix.md)（1.2.6，英文）
+- [获取途径修复记录](docs/acquisition-native-fix.md)（1.2.7，主要为英文）：来源数据范围与游戏内测试清单
+- [获取途径图标卡片](docs/acquisition-card-layout.md)（1.2.8）
+- [每页卡片行数](docs/detail-rows-setting.md)（1.2.9）
+- [来源卡片合并](docs/acquisition-card-merge.md)（1.2.10）
+- [实体与液体领取](docs/entity-spawning.md)（英文）：生成流程、联机路由与游戏内验收清单
+- [PR #3 / #4 整合记录](docs/pr-3-4-integration.md)（英文）：审查依据、贡献归属与验证范围
+- [CUCoreLib 公开接口与专项测试计划](docs/cucore-public-api-test-plan.md)
+- [GitHub 自动编译与发布](docs/github-automation.md)
+- [回归测试说明](tests/README.md)（英文）
 
-BepInEx writes UEI configuration to:
+## 作者与许可证
 
-BepInEx 会把 UEI 配置写入：
+作者：**Aakber（小叶子）**。感谢 **dfgger433** 在 PR #3 / #4 中贡献的 CUCoreLib / SexMod 兼容与界面优化。
 
-```text
-BepInEx/config/casualtiesunknown.uei.cfg
-```
-
-| 配置项 / Setting              | 说明 / Description                                                                                                           |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `General/Language`          | `auto`、`zh` 或 `en`。 / `auto`, `zh`, or `en`.                                                                  |
-| `General/PanelPosition`     | 面板位置：`left` 或 `right`。 / Panel position: `left` or `right`.                                                   |
-| `General/PanelScale`        | 面板比例，当前设置页会在 85%、100%、115%、130% 之间循环。 / Panel scale, currently cycles between 85%, 100%, 115%, and 130%. |
-| `Favorites/FavoriteEntries` | 收藏条目，格式为 `item:<id>` / `liquid:<id>`。 / Persisted favorite entries as `item:<id>` / `liquid:<id>`.          |
-| `Cheat/Enabled`             | 开关，默认关闭。 / give-item toggle, disabled by default.                                                                    |
-
-## 使用说明 / Usage
-
-- Open the game's native right-click inventory/radial backpack UI to show UEI.
-- Type in the search box to filter entries.
-- Use category arrows to switch between `All`, `Favorites`, item categories, and `Liquid`.
-- Click the small star button on an entry to favorite it.
-- Left-click an entry to view source recipes.
-- Right-click an entry to view usage recipes.
-- Use the recipe panel arrows to page through recipes.
-- Click recipe materials/results to jump through the recipe chain.
-- Use the jump button in the detail panel to open the original crafting panel.
-- Use the gear button beside the search box to open UEI settings.
-
-说明：
-
-- 打开游戏原版右键物品栏 / 径向背包界面后，UEI 会自动显示。
-- 在搜索框中输入关键词可筛选条目。
-- 使用分类箭头切换 `全部`、`收藏`、物品分类和 `液体`。
-- 点击条目角落的星标按钮可收藏。
-- 左键条目查看来源配方。
-- 右键条目查看用途配方。
-- 使用配方面板箭头翻页。
-- 点击配方材料 / 结果可在配方链中跳转。
-- 点击详情页跳转按钮可打开原版制作面板并选中配方。
-- 点击搜索框旁的齿轮按钮可打开 UEI 设置。
-
-## 作者 / Author
-
-**Aakber (小叶子)**
-
-## 许可证 / License
-
-This repository is licensed under the [MIT License](LICENSE).
-
-本仓库源码使用 [MIT License](LICENSE) 授权。
-
-The license only covers UEI source code in this repository. It does not grant any rights to `Casualties Unknown Demo`, game assets, game assemblies, BepInEx, Harmony, Unity, TextMeshPro, or any other third-party dependency.
-
-该许可证仅适用于本仓库中的 UEI 源码，不包含 `Casualties Unknown Demo` 游戏本体、游戏资源、游戏程序集、BepInEx、Harmony、Unity、TextMeshPro 或其他第三方依赖。
+本仓库源码采用 [MIT License](LICENSE)。该许可证只适用于本仓库中的 UEI 源码，不授予对《Casualties: Unknown》游戏本体、游戏资源与程序集、BepInEx、Harmony、Unity、TextMeshPro 或其他第三方依赖的任何权利。

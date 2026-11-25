@@ -120,3 +120,21 @@ namespace UnrelatedMod
         public static bool IsRegistered(string id) => throw new Exception("Wrong registry");
     }
 }
+
+
+namespace Together
+{
+    public sealed class ScavPlayer { public Body? body; }
+    public static class Con
+    {
+        public static ScavPlayer? Caller;
+        public static ScavPlayer? GetCommandCallerPlayer() => Caller;
+    }
+}
+namespace CasualtiesTogetherUtils
+{
+    public static class Util_BodyExtensions
+    {
+        public static void ForceAutoPickUpItem(Body body, Item item) => body.AutoPickUpItem(item);
+    }
+}
