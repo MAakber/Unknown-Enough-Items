@@ -4,6 +4,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <AssemblyName>UEI</AssemblyName>
     <RootNamespace>UEI</RootNamespace>
@@ -18,8 +19,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="tests/**/*.cs" />
-    <Compile Remove="artifacts/**/*.cs" />
+    <Compile Include="src/**/*.cs" />
   </ItemGroup>
 
   <ItemGroup>

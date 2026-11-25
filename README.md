@@ -159,6 +159,8 @@ UEI（Unknown Enough Items）的灵感来自 Minecraft 的 JEI。打开原版物
 
 普通玩家直接安装发布版即可，不需要自己编译。
 
+插件源码集中在 `src/`，回归测试在 `tests/`，构建与发布脚本在 `scripts/`。`UEI.csproj` 留在仓库根目录，下面的命令均从仓库根目录运行。
+
 ### 自动构建
 
 GitHub Actions 会检查拉取请求，并为本仓库的提交生成构建包；维护者推送与源码版本一致的 `vX.Y.Z` 标签后，会自动构建并发布 Release。CI 使用加密的编译引用，仓库中不含明文的游戏程序集。详见 [GitHub 自动编译与发布](docs/github-automation.md)。
@@ -191,7 +193,7 @@ dotnet build UEI.csproj -c Release /p:GameRoot="<游戏目录>"
 
 编译结果会直接输出到游戏的 `BepInEx/plugins/UEI/UEI.build.dll`。游戏运行时该文件会被锁定，请先关闭游戏。
 
-发布新版本前，先把 `UEI.csproj` 和 `Plugin.cs` 中的版本号改成一致的 `x.y.z`，并更新 `packaging/RELEASE-NOTES.md` 顶部的版本标记。回归测试的运行方法见 [tests/README.md](tests/README.md)。
+发布新版本前，先把 `UEI.csproj` 和 `src/Plugin.cs` 中的版本号改成一致的 `x.y.z`，并更新 `packaging/RELEASE-NOTES.md` 顶部的版本标记。回归测试的运行方法见 [tests/README.md](tests/README.md)。
 
 ## 开发记录
 

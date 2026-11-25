@@ -10,7 +10,7 @@ The executable links the production `UeiModInterop.cs`, `UeiCheatPolicy.cs`,
 `UeiI18n.cs`, `UeiAcquisition.cs`, `UeiAcquisitionIndex.cs`, `UeiAcquisitionCards.cs`,
 `UeiAcquisitionSupplement.cs`, `UeiResourceIndex.cs`,
 `UeiNativeAcquisition.cs`, `UeiInput.cs`, `UeiFavorites.cs`,
-`UeiCatalogView.cs`, and `UeiEntryInteraction.cs` files. It deliberately loads a separate fixture
+`UeiCatalogView.cs`, and `UeiEntryInteraction.cs` files from `src/`. It deliberately loads a separate fixture
 assembly only after testing absent mods. Fixtures include ambiguous overloads, a registry initialized
 after assembly load, registry replacement, and a mutating locale API that must
 never be called. No test packages or game binaries are bundled.

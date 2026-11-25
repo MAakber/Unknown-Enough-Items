@@ -41,13 +41,13 @@ def digest(data: bytes) -> str:
 
 def read_version(root: Path = ROOT, tag: str | None = None) -> str:
     version = ET.parse(root / "UEI.csproj").findtext("./PropertyGroup/Version")
-    source = (root / "Plugin.cs").read_text(encoding="utf-8-sig")
+    source = (root / "src/Plugin.cs").read_text(encoding="utf-8-sig")
     base = re.search(r'PluginVersionBase\s*=\s*"([^"]+)"', source)
     suffix = re.search(r'PluginVersion\s*=\s*PluginVersionBase\s*\+\s*"([^"]+)"', source)
     if not version or not re.fullmatch(VERSION_PATTERN, version):
         raise ValueError("UEI.csproj Version must be x.x.x (no suffix).")
     if not base or not suffix or base[1] + suffix[1] != version:
-        raise ValueError("Plugin.cs and UEI.csproj versions must match.")
+        raise ValueError("src/Plugin.cs and UEI.csproj versions must match.")
     if tag is not None and tag != "v" + version:
         raise ValueError(f"Release tag must be v{version}; got {tag!r}.")
     return version

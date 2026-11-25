@@ -46,7 +46,8 @@ class AutomationChecks(unittest.TestCase):
         (self.root / "UEI.csproj").write_text(
             f"<Project><PropertyGroup><Version>{version}</Version></PropertyGroup></Project>", encoding="utf-8")
         base, _, suffix = plugin_version.rpartition(".")
-        (self.root / "Plugin.cs").write_text(
+        (self.root / "src").mkdir(exist_ok=True)
+        (self.root / "src/Plugin.cs").write_text(
             f'const string PluginVersionBase = "{base}";\nconst string PluginVersion = PluginVersionBase + ".{suffix}";',
             encoding="utf-8")
 

@@ -163,6 +163,8 @@ Players should install a release; there is no need to build UEI yourself.
 
 GitHub Actions checks pull requests and builds commits to this repository. Pushing a `vX.Y.Z` tag that matches the source version builds and publishes a GitHub Release. CI compiles against encrypted reference assemblies, so the repository contains no plain game assemblies. See the [automation guide](docs/github-automation.md) (in Chinese).
 
+Plugin source files are in `src/`, regression tests in `tests/`, and build and release scripts in `scripts/`. `UEI.csproj` stays at the repository root; run the commands below from there.
+
 ### Manual build
 
 You need a game folder with BepInEx installed, the .NET SDK (CI uses .NET 10) and this repository.
@@ -191,7 +193,7 @@ dotnet build UEI.csproj -c Release /p:GameRoot="<game folder>"
 
 The build writes `BepInEx/plugins/UEI/UEI.build.dll` straight into the game folder. Close the game first, because Windows locks the file while the game is running.
 
-Before a release, set the same `x.y.z` version in `UEI.csproj` and `Plugin.cs`, and update the version marker at the top of `packaging/RELEASE-NOTES.md`. See [tests/README.md](tests/README.md) for running the regression tests.
+Before a release, set the same `x.y.z` version in `UEI.csproj` and `src/Plugin.cs`, and update the version marker at the top of `packaging/RELEASE-NOTES.md`. See [tests/README.md](tests/README.md) for running the regression tests.
 
 ## Development notes
 

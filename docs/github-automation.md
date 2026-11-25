@@ -10,12 +10,12 @@
 | 推送 `v1.2.5` 这样的版本标签 | 全部检查和编译通过后，创建并发布对应 GitHub Release |
 
 版本号本身严格为 `x.x.x`。标签采用 `v` 前缀，必须与 `UEI.csproj` 和
-`Plugin.cs` 拼接后的版本完全相同。标签指向的提交必须已进入 `main`。
+`src/Plugin.cs` 拼接后的版本完全相同。标签指向的提交必须已进入 `main`。
 普通提交不自动改版本，也不覆盖已有 Release。
 
 ## 维护者发布步骤
 
-1. 更新 `UEI.csproj` 的 `Version`、`Plugin.cs` 的版本常量和 README 版本标识。
+1. 更新 `UEI.csproj` 的 `Version`、`src/Plugin.cs` 的版本常量和 README 版本标识。
    同时重写 `packaging/RELEASE-NOTES.md`，记录本版实际新增、修复、已知限制与安装方式，
    并更新首行的版本标记。版本不匹配或说明为空会阻止检查通过。
 2. 提交并合入 `main`，等待 `UEI CI and Release` 的检查和构建通过。

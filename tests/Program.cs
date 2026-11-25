@@ -174,15 +174,16 @@ internal static class Program
 
     private static void SourceGuards(string root)
     {
-        string runtime = File.ReadAllText(Path.Combine(root, "UeiRuntime.cs"));
+        string sourceRoot = Path.Combine(root, "src");
+        string runtime = File.ReadAllText(Path.Combine(sourceRoot, "UeiRuntime.cs"));
         Check(runtime.Contains("[HarmonyPatch(typeof(GlobalDark), \"Update\")]"), "GlobalDark recovery hook removed");
         Check(runtime.Contains("UeiRuntime.TickStandalone(\"GlobalDark.Update\")"), "GlobalDark no longer drives recovery");
         Check(runtime.Contains("UeiPlugin.EnsureRuntime(source)"), "Recovery does not recreate runtime");
         Check(runtime.IndexOf("bool shouldShow = ShouldShow(camera, out string hideReason);", StringComparison.Ordinal) < runtime.IndexOf("if (_lastShownFrame == Time.frameCount)", StringComparison.Ordinal), "Visibility must be reevaluated before deduplication");
         Check(runtime.IndexOf("UeiNativeAcquisition.Tick();", StringComparison.Ordinal) < runtime.IndexOf("bool shouldShow = ShouldShow(camera, out string hideReason);", StringComparison.Ordinal), "Native discovery must continue while inventory is closed");
-        string native = File.ReadAllText(Path.Combine(root, "UeiNativeAcquisition.cs"));
+        string native = File.ReadAllText(Path.Combine(sourceRoot, "UeiNativeAcquisition.cs"));
         Check(!native.Contains("Resources.LoadAll") && !native.Contains("Instantiate("), "Native acquisition must not bulk-load or instantiate gameplay objects");
-        string catalog = File.ReadAllText(Path.Combine(root, "UeiCatalog.cs"));
+        string catalog = File.ReadAllText(Path.Combine(sourceRoot, "UeiCatalog.cs"));
         int refresh = catalog.IndexOf("private static void RefreshAcquisition", StringComparison.Ordinal);
         string sourceRefresh = catalog[refresh..catalog.IndexOf("private static void BuildCategories", refresh, StringComparison.Ordinal)];
         Check(!sourceRefresh.Contains("BuildRecipeLinks(") && !sourceRefresh.Contains("_revision++"), "Source completion must not rebuild recipes or invalidate the grid/search catalog");
@@ -190,11 +191,11 @@ internal static class Program
             && sourceRefresh.Contains("string.Equals(entry.AcquisitionSupplement, supplement, StringComparison.Ordinal)"),
             "Source revisions must cache and compare the supplement returned by acquisition composition");
         Check(!sourceRefresh.Contains("AcquisitionAnnotation ="), "Supplement filtering must not overwrite the raw acquisition annotation");
-        string interop = File.ReadAllText(Path.Combine(root, "UeiModInterop.cs"));
+        string interop = File.ReadAllText(Path.Combine(sourceRoot, "UeiModInterop.cs"));
         Check(!interop.Contains(".GetTypes("), "Optional mod discovery enumerates all types");
         Check(!interop.Contains("\"CUCoreLib.Registries.LocaleRegistry\""), "Mutating locale registry is bound");
         Check(!interop.Contains("\"CUCoreLib.Helpers.LocaleLoader\""), "Internal locale loader is bound");
-        string panel = File.ReadAllText(Path.Combine(root, "UeiPanel.cs"));
+        string panel = File.ReadAllText(Path.Combine(sourceRoot, "UeiPanel.cs"));
         int acquisitionRefresh = panel.IndexOf("if (_acquisitionRevision != UeiCatalog.AcquisitionRevision)", StringComparison.Ordinal);
         string acquisitionBlock = panel[acquisitionRefresh..panel.IndexOf("if (_favoritesRevision", acquisitionRefresh, StringComparison.Ordinal)];
         Check(acquisitionBlock.Contains("_detailDirty = true;") && !acquisitionBlock.Contains("_dirty = true;"), "New acquisition text must refresh details without rebuilding the grid");
@@ -210,7 +211,7 @@ internal static class Program
         Check(panel.Contains("inst = SexModHelper.CreateInstance(entry.Id, pos, 0f);"), "SexMod factory fallback lost");
         Check(panel.Contains("? CuCoreLibHelper.CreateInstance(entry.Id, pos, 0f)"), "CUCore public factory is not the preferred local path");
         Check(panel.Contains("if (!IsAlive) return;") && runtime.Contains("_panel.IsAlive && _attachedCanvas == canvas"), "Destroyed UI must be skipped and recreated");
-        string plugin = File.ReadAllText(Path.Combine(root, "Plugin.cs"));
+        string plugin = File.ReadAllText(Path.Combine(sourceRoot, "Plugin.cs"));
         string version = Regex.Match(File.ReadAllText(Path.Combine(root, "UEI.csproj")), "<Version>([^<]+)</Version>").Groups[1].Value;
         string baseVersion = Regex.Match(plugin, "PluginVersionBase = \"([^\"]+)\"").Groups[1].Value;
         string suffix = Regex.Match(plugin, "PluginVersion = PluginVersionBase \\+ \"([^\"]+)\"").Groups[1].Value;
